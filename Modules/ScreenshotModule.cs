@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -17,6 +18,11 @@ public sealed class ScreenshotModule : IGameModule
     private int latestWidth;
     private int latestHeight;
 
+    private CancellationTokenSource? streamCts;
+    private Task? streamTask;
+    private Func<byte[], Task>? frameCallback;
+    private bool isStreaming;
+
     public string Name => "Screenshot";
 
     public ScreenshotModule(Configuration configuration, EventBus eventBus, string pluginConfigDirectory)
@@ -29,9 +35,25 @@ public sealed class ScreenshotModule : IGameModule
     public void Initialize()
     {
         Directory.CreateDirectory(cacheDirectory);
+
+        // Clean up leftover temp files from aborted captures
+        foreach (var tmp in Directory.GetFiles(cacheDirectory, "*.tmp.*"))
+        {
+            try
+            {
+                File.Delete(tmp);
+                Plugin.Log.Debug("Cleaned up leftover temp file: {Path}", tmp);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Debug(ex, "Failed to delete leftover temp file: {Path}", tmp);
+            }
+        }
     }
 
     public string? LatestPath => latestPath;
+
+    public bool IsStreaming => isStreaming;
 
     public async Task<ScreenshotReadyEvent> CaptureAsync(CancellationToken cancellationToken)
     {
@@ -39,7 +61,7 @@ public sealed class ScreenshotModule : IGameModule
         await captureLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await Task.Run(CaptureInternal, cancellationToken).ConfigureAwait(false);
+            return await Task.Run(CaptureToFile, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -47,26 +69,107 @@ public sealed class ScreenshotModule : IGameModule
         }
     }
 
+    public async Task StartStreamingAsync(int fps, Func<byte[], Task> onFrame)
+    {
+        await StopStreamingAsync().ConfigureAwait(false);
+
+        fps = Math.Clamp(fps, 1, 120);
+        frameCallback = onFrame;
+        streamCts = new CancellationTokenSource();
+        isStreaming = true;
+
+        var delayMs = 1000.0 / fps;
+        streamTask = Task.Run(async () =>
+        {
+            var sw = Stopwatch.StartNew();
+            while (!streamCts.Token.IsCancellationRequested)
+            {
+                var frameStart = sw.Elapsed.TotalMilliseconds;
+
+                try
+                {
+                    var frame = await CaptureFrameToMemoryAsync(streamCts.Token).ConfigureAwait(false);
+                    if (frameCallback != null)
+                        await frameCallback(frame).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.Error(ex, "Stream frame capture failed");
+                }
+
+                var elapsed = sw.Elapsed.TotalMilliseconds - frameStart;
+                var delay = (int)Math.Max(1, delayMs - elapsed);
+                try
+                {
+                    await Task.Delay(delay, streamCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        });
+
+        Plugin.Log.Info("Stream started at {Fps} FPS", fps);
+    }
+
+    public async Task StopStreamingAsync()
+    {
+        if (streamCts != null)
+        {
+            await streamCts.CancelAsync().ConfigureAwait(false);
+            streamCts.Dispose();
+            streamCts = null;
+        }
+
+        if (streamTask != null)
+        {
+            try { await streamTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Plugin.Log.Error(ex, "Stream task finalization failed"); }
+            streamTask = null;
+        }
+
+        frameCallback = null;
+        isStreaming = false;
+    }
+
     public void Dispose()
     {
+        StopStreamingAsync().GetAwaiter().GetResult();
         captureLock.Dispose();
     }
 
-    private ScreenshotReadyEvent CaptureInternal()
+    private async Task<byte[]> CaptureFrameToMemoryAsync(CancellationToken ct)
     {
-        var hwnd = Plugin.PluginInterface.UiBuilder.WindowHandlePtr;
-        if (hwnd == IntPtr.Zero)
-            throw new InvalidOperationException("Game window handle is unavailable.");
+        await captureLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() =>
+            {
+                var (origin, width, height) = GetCaptureRegion();
+                using var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+                using var graphics = Graphics.FromImage(bitmap);
+                graphics.CopyFromScreen(origin.X, origin.Y, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
 
-        if (!GetClientRect(hwnd, out var rect))
-            throw new InvalidOperationException("Failed to read game client rectangle.");
+                using var ms = new System.IO.MemoryStream();
+                SaveJpeg(bitmap, ms, configuration.ScreenshotJpegQuality);
+                return ms.ToArray();
+            }, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            captureLock.Release();
+        }
+    }
 
-        var width = Math.Max(1, rect.Right - rect.Left);
-        var height = Math.Max(1, rect.Bottom - rect.Top);
-        var origin = new NativePoint { X = 0, Y = 0 };
-
-        if (!ClientToScreen(hwnd, ref origin))
-            throw new InvalidOperationException("Failed to map game client rectangle to screen.");
+    private ScreenshotReadyEvent CaptureToFile()
+    {
+        var (origin, width, height) = GetCaptureRegion();
 
         var tempPath = Path.Combine(cacheDirectory, "latest.tmp.jpg");
         var finalPath = Path.Combine(cacheDirectory, "latest.jpg");
@@ -99,18 +202,43 @@ public sealed class ScreenshotModule : IGameModule
         return evt;
     }
 
+    private static (NativePoint Origin, int Width, int Height) GetCaptureRegion()
+    {
+        var hwnd = Plugin.PluginInterface.UiBuilder.WindowHandlePtr;
+        if (hwnd == IntPtr.Zero)
+            throw new InvalidOperationException("Game window handle is unavailable.");
+
+        if (!GetClientRect(hwnd, out var rect))
+            throw new InvalidOperationException("Failed to read game client rectangle.");
+
+        var width = Math.Max(1, rect.Right - rect.Left);
+        var height = Math.Max(1, rect.Bottom - rect.Top);
+        var origin = new NativePoint { X = 0, Y = 0 };
+
+        if (!ClientToScreen(hwnd, ref origin))
+            throw new InvalidOperationException("Failed to map game client rectangle to screen.");
+
+        return (origin, width, height);
+    }
+
     private static void SaveJpeg(Image image, string path, int quality)
+    {
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        SaveJpeg(image, fs, quality);
+    }
+
+    private static void SaveJpeg(Image image, Stream stream, int quality)
     {
         var encoder = ImageCodecInfo.GetImageEncoders().FirstOrDefault(x => x.FormatID == ImageFormat.Jpeg.Guid);
         if (encoder == null)
         {
-            image.Save(path, ImageFormat.Jpeg);
+            image.Save(stream, ImageFormat.Jpeg);
             return;
         }
 
         using var parameters = new EncoderParameters(1);
         parameters.Param[0] = new EncoderParameter(Encoder.Quality, quality);
-        image.Save(path, encoder, parameters);
+        image.Save(stream, encoder, parameters);
     }
 
     [DllImport("user32.dll", SetLastError = true)]

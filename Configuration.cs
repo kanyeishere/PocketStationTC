@@ -16,6 +16,7 @@ public sealed class Configuration : IPluginConfiguration
     public int ChatHistoryLimit { get; set; } = 500;
     public int PlayerStateIntervalMs { get; set; } = 750;
     public int ScreenshotJpegQuality { get; set; } = 75;
+    public int StreamFps { get; set; } = 30;
     public string SelectedChatModeId { get; set; } = ChatFilterDefaults.AllId;
     public List<ChatFilterMode> ChatFilterModes { get; set; } = [];
 
@@ -38,6 +39,9 @@ public sealed class Configuration : IPluginConfiguration
 
         if (ScreenshotJpegQuality is < 20 or > 95)
             ScreenshotJpegQuality = 75;
+
+        if (StreamFps is < 1 or > 120)
+            StreamFps = 30;
 
         ChatFilterDefaults.EnsureDefaults(this);
     }

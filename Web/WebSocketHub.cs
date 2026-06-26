@@ -50,4 +50,20 @@ public sealed class WebSocketHub
             }
         }
     }
+
+    public async Task BroadcastBinaryAsync(byte[] data, CancellationToken cancellationToken)
+    {
+        foreach (var connection in connections.Values)
+        {
+            try
+            {
+                await connection.SendBinaryAsync(data, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Debug(ex, "Dropping failed WebSocket connection {Id}", connection.Id);
+                Remove(connection);
+            }
+        }
+    }
 }

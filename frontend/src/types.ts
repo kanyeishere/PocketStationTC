@@ -1,4 +1,4 @@
-export type TabKey = "chat" | "state" | "screen" | "commands";
+export type TabKey = "chat" | "state" | "screen" | "live" | "commands";
 export type ConnectionMode = "" | "online" | "offline";
 
 export interface Envelope<TPayload = unknown> {
@@ -93,4 +93,9 @@ export interface HealthInfo {
   port: number;
   clients: number;
   urls: string[];
+}
+
+export interface StreamConfig {
+  fps: number;
+  running: boolean;
 }

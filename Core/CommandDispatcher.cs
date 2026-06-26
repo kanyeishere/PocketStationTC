@@ -12,6 +12,9 @@ public sealed class CommandDispatcher
     private readonly GameFacade game;
     private readonly ScreenshotModule screenshotModule;
 
+    public Func<int, Task>? OnStartStream { get; set; }
+    public Func<Task>? OnStopStream { get; set; }
+
     public CommandDispatcher(
         Configuration configuration,
         EventBus eventBus,
@@ -30,6 +33,8 @@ public sealed class CommandDispatcher
         {
             "cmd.sendChat" => await DispatchSendChatAsync(envelope.Payload).ConfigureAwait(false),
             "cmd.requestScreenshot" => await DispatchScreenshotAsync(envelope.Payload, cancellationToken).ConfigureAwait(false),
+            "cmd.startStream" => await DispatchStartStreamAsync(envelope.Payload).ConfigureAwait(false),
+            "cmd.stopStream" => await DispatchStopStreamAsync().ConfigureAwait(false),
             "cmd.ping" => new CommandResult(true, "pong", new { serverTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }),
             _ => new CommandResult(false, $"Unknown command type: {envelope.Type}")
         };
@@ -84,5 +89,48 @@ public sealed class CommandDispatcher
     private static string NormalizeChatCommand(string content)
     {
         return content.Trim();
+    }
+
+    private async Task<CommandResult> DispatchStartStreamAsync(JsonElement payload)
+    {
+        try
+        {
+            var command = payload.ValueKind == JsonValueKind.Object
+                ? payload.Deserialize<StartStreamCommand>(Plugin.JsonOptions)
+                : new StartStreamCommand();
+
+            var fps = command?.Fps ?? configuration.StreamFps;
+            fps = Math.Clamp(fps, 1, 120);
+
+            if (OnStartStream == null)
+                return new CommandResult(false, "Streaming is not available.");
+
+            await OnStartStream(fps).ConfigureAwait(false);
+            configuration.StreamFps = fps;
+
+            return new CommandResult(true, "stream started", new { fps });
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "StartStream command failed");
+            return new CommandResult(false, $"startStream failed: {ex.Message}");
+        }
+    }
+
+    private async Task<CommandResult> DispatchStopStreamAsync()
+    {
+        try
+        {
+            if (OnStopStream == null)
+                return new CommandResult(false, "Streaming is not available.");
+
+            await OnStopStream().ConfigureAwait(false);
+            return new CommandResult(true, "stream stopped");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "StopStream command failed");
+            return new CommandResult(false, $"stopStream failed: {ex.Message}");
+        }
     }
 }

@@ -214,6 +214,15 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         ImGui.Separator();
+        ImGui.TextUnformatted("Live Stream");
+        var streamFps = configuration.StreamFps;
+        if (ImGui.SliderInt("Stream FPS", ref streamFps, 1, 120))
+        {
+            configuration.StreamFps = streamFps;
+            SaveConfiguration();
+        }
+
+        ImGui.Separator();
         ImGui.TextUnformatted($"Clients: {webServer.ClientCount}");
         ImGui.TextUnformatted($"Token: {configuration.Token}");
 

@@ -47,6 +47,11 @@ public sealed class WebSocketConnection : IDisposable
         return SendFrameAsync(0x1, Encoding.UTF8.GetBytes(text), cancellationToken);
     }
 
+    public Task SendBinaryAsync(byte[] data, CancellationToken cancellationToken)
+    {
+        return SendFrameAsync(0x2, data, cancellationToken);
+    }
+
     public void Dispose()
     {
         if (disposed)

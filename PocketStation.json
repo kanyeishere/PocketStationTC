@@ -1,5 +1,5 @@
 {
-  "Author": "Yiwei",
+  "Author": "Wotou",
   "Name": "Pocket Station",
   "Punchline": "LAN mobile console for chat, player state, commands, and screenshots.",
   "Description": "Runs a local LAN web console for monitoring game chat and player state, sending whitelisted chat commands, and requesting live screenshots.",

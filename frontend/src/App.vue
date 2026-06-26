@@ -5,6 +5,7 @@ import TopBar from "@/components/TopBar.vue";
 import { usePocketStation } from "@/composables/usePocketStation";
 import ChatView from "@/views/ChatView.vue";
 import CommandsView from "@/views/CommandsView.vue";
+import LiveView from "@/views/LiveView.vue";
 import ScreenView from "@/views/ScreenView.vue";
 import StateView from "@/views/StateView.vue";
 import type { TabKey } from "@/types";
@@ -28,11 +29,17 @@ const {
   snapshot,
   connectWs,
   deleteCurrentMode,
+  liveFps,
+  liveFrame,
+  liveFrameSize,
+  liveRunning,
   loadInitial,
   requestScreenshot,
   saveMode,
   selectMode,
-  sendChat
+  sendChat,
+  startStream,
+  stopStream
 } = usePocketStation();
 
 onMounted(() => {
@@ -81,6 +88,17 @@ function applyCommand(command: string) {
       :loading="screenshotLoading"
       :meta="screenMeta"
       @capture="requestScreenshot"
+    />
+
+    <LiveView
+      :class="{ active: activeTab === 'live' }"
+      :is-active="activeTab === 'live'"
+      :fps="liveFps"
+      :running="liveRunning"
+      :frame="liveFrame"
+      :frame-size="liveFrameSize"
+      @start="startStream"
+      @stop="stopStream"
     />
 
     <CommandsView

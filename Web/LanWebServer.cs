@@ -48,6 +48,16 @@ public sealed class LanWebServer : IDisposable
         this.staticRoot = staticRoot;
         this.saveConfiguration = saveConfiguration;
         webSocketHub = new WebSocketHub(eventBus);
+
+        // Wire stream commands: frames go directly to WebSocket as binary
+        commandDispatcher.OnStartStream = fps =>
+        {
+            configuration.StreamFps = fps;
+            saveConfiguration();
+            return screenshotModule.StartStreamingAsync(fps, frame => webSocketHub.BroadcastBinaryAsync(frame, CancellationToken.None));
+        };
+
+        commandDispatcher.OnStopStream = () => screenshotModule.StopStreamingAsync();
     }
 
     public int ClientCount => webSocketHub.Count;
@@ -380,6 +390,56 @@ public sealed class LanWebServer : IDisposable
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "HTTP screenshot capture failed");
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (request.Method == "GET" && request.Path == "/api/stream/config")
+        {
+            await WriteJsonAsync(stream, new
+            {
+                fps = configuration.StreamFps,
+                running = screenshotModule.IsStreaming
+            }, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (request.Method == "POST" && request.Path == "/api/stream/start")
+        {
+            try
+            {
+                var command = request.Body.Length > 0
+                    ? JsonSerializer.Deserialize<StartStreamCommand>(request.Body, Plugin.JsonOptions)
+                    : new StartStreamCommand();
+
+                var fps = Math.Clamp(command?.Fps ?? configuration.StreamFps, 1, 120);
+                await screenshotModule.StartStreamingAsync(fps, frame => webSocketHub.BroadcastBinaryAsync(frame, CancellationToken.None)).ConfigureAwait(false);
+                configuration.StreamFps = fps;
+                saveConfiguration();
+
+                await WriteJsonAsync(stream, new CommandResult(true, "stream started", new { fps }), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "HTTP stream start failed");
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (request.Method == "POST" && request.Path == "/api/stream/stop")
+        {
+            try
+            {
+                await screenshotModule.StopStreamingAsync().ConfigureAwait(false);
+                await WriteJsonAsync(stream, new CommandResult(true, "stream stopped"), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "HTTP stream stop failed");
                 await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
             }
 

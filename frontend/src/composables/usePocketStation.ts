@@ -42,6 +42,10 @@ export function usePocketStation() {
   const allChatTypes = ref<string[]>([]);
   const screenshotLoading = ref(false);
   const sendLoading = ref(false);
+  const liveFps = ref(30);
+  const liveRunning = ref(false);
+  const liveFrame = shallowRef<ImageBitmap | null>(null);
+  const liveFrameSize = ref("");
   let reconnectTimer: number | undefined;
 
   const currentMode = computed(() => {
@@ -72,11 +76,17 @@ export function usePocketStation() {
     }
 
     const socket = new WebSocket(websocketUrl());
+    socket.binaryType = "arraybuffer";
     ws.value = socket;
     setConnection("连接中");
 
     socket.onopen = () => setConnection("已连接", "online");
     socket.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        handleBinaryFrame(event.data);
+        return;
+      }
+
       try {
         handleEnvelope(JSON.parse(event.data) as Envelope);
       } catch (error) {
@@ -180,6 +190,38 @@ export function usePocketStation() {
       screenMeta.value = message;
     } finally {
       screenshotLoading.value = false;
+    }
+  }
+
+  async function handleBinaryFrame(data: ArrayBuffer) {
+    try {
+      const blob = new Blob([data], { type: "image/jpeg" });
+      const bitmap = await createImageBitmap(blob);
+      liveFrame.value = bitmap;
+      liveFrameSize.value = `${bitmap.width} x ${bitmap.height}`;
+    } catch (error) {
+      // Ignore corrupt frames — just skip
+    }
+  }
+
+  async function startStream(fps?: number) {
+    const targetFps = fps ?? liveFps.value;
+    try {
+      await sendEnvelope("cmd.startStream", { fps: targetFps });
+      liveFps.value = targetFps;
+      liveRunning.value = true;
+    } catch (error) {
+      liveRunning.value = false;
+      throw error;
+    }
+  }
+
+  async function stopStream() {
+    try {
+      await sendEnvelope("cmd.stopStream", {});
+    } finally {
+      liveRunning.value = false;
+      liveFrame.value = null;
     }
   }
 
@@ -297,11 +339,17 @@ export function usePocketStation() {
     connectWs,
     deleteCurrentMode,
     loadInitial,
+    liveFps,
+    liveFrame,
+    liveFrameSize,
+    liveRunning,
     requestScreenshot,
     saveMode,
     selectMode,
     sendChat,
-    sendEnvelope
+    sendEnvelope,
+    startStream,
+    stopStream
   };
 }
 

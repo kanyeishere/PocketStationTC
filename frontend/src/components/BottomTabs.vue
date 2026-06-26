@@ -4,7 +4,8 @@ import type { TabKey } from "@/types";
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "chat", label: "聊天" },
   { key: "state", label: "状态" },
-  { key: "screen", label: "画面" },
+  { key: "screen", label: "截图" },
+  { key: "live", label: "直播" },
   { key: "commands", label: "指令" }
 ];
 
