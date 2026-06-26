@@ -62,6 +62,7 @@ frontend/tsconfig.tsbuildinfo
 frontend/tsconfig.node.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
+wwwroot/
 
 # Temp / scratch
 lib/temp_decomp/

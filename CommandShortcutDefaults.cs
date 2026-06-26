@@ -1,4 +1,5 @@
-using PocketStation.Protocol;
+using PocketStation.Domain;
+using PocketStation.Host;
 
 namespace PocketStation;
 

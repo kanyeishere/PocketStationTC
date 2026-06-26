@@ -9,11 +9,16 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using OmenTools;
 using OmenTools.Dalamud.Helpers;
-using PocketStation.Core;
-using PocketStation.Game;
+using PocketStation.Api;
+using PocketStation.Api.Controllers;
+using PocketStation.Api;
+using PocketStation.Host;
+using PocketStation.Domain;
+using PocketStation.Infrastructure.Messaging;
+using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Game;
 using PocketStation.Helpers;
-using PocketStation.Modules;
-using PocketStation.Web;
+using PocketStation.Services;
 
 namespace PocketStation;
 
@@ -81,16 +86,36 @@ public sealed class Plugin : IDalamudPlugin
         moduleHost.Initialize();
 
         var staticRoot = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName ?? AppContext.BaseDirectory, "wwwroot");
+
+        var webSocketHub = new WebSocketHub(eventBus);
+        var webSocketHandler = new WebSocketHandler(
+            configuration, eventBus, webSocketHub, commandDispatcher, chatMonitor, playerState);
+
+        var controllers = new IHttpController[]
+        {
+            new HealthController(configuration, webSocketHub),
+            new ChatController(configuration, commandDispatcher, chatMonitor, SaveConfiguration),
+            new StateController(playerState),
+            new PluginController(commandDispatcher),
+            new ScreenshotController(screenshotModule),
+            new StreamController(configuration, webSocketHub, screenshotModule, SaveConfiguration),
+            new ShortcutController(configuration, SaveConfiguration),
+            new DailyRoutinesController(dailyRoutines),
+            new CommandController(commandDispatcher),
+        };
+
+        // Wire stream commands: frames go directly to WebSocket as binary
+        commandDispatcher.OnStartStream = fps =>
+        {
+            configuration.StreamFps = fps;
+            SaveConfiguration();
+            return screenshotModule.StartStreamingAsync(fps,
+                frame => webSocketHub.BroadcastBinaryAsync(frame, CancellationToken.None));
+        };
+        commandDispatcher.OnStopStream = () => screenshotModule.StopStreamingAsync();
+
         webServer = new LanWebServer(
-            configuration,
-            eventBus,
-            commandDispatcher,
-            chatMonitor,
-            playerState,
-            screenshotModule,
-            dailyRoutines,
-            staticRoot,
-            SaveConfiguration);
+            configuration, eventBus, webSocketHub, webSocketHandler, controllers, staticRoot);
 
         if (configuration.LanEnabled)
             webServer.Start();
@@ -102,7 +127,7 @@ public sealed class Plugin : IDalamudPlugin
         RegisterCommand(CommandName);
         RegisterCommand(ShortCommandName);
 
-        eventBus.Publish("event.system", new Protocol.SystemEvent("info", "Pocket Station initialized", new
+        eventBus.Publish("event.system", new Domain.SystemEvent("info", "Pocket Station initialized", new
         {
             lanEnabled = configuration.LanEnabled,
             urls = webServer.AccessUrls
@@ -158,7 +183,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         CommandManager.AddHandler(command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open Pocket Station LAN console settings."
+            HelpMessage = "打开 Pocket Station 局域网控制台设置。"
         });
     }
 
@@ -167,12 +192,12 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             var result = await screenshotModule.CaptureAsync(CancellationToken.None).ConfigureAwait(false);
-            DService.Instance().Chat.Print($"[Pocket Station] Screenshot pushed: {result.Width}x{result.Height}");
+            DService.Instance().Chat.Print($"[Pocket Station] 截图已推送：{result.Width}x{result.Height}");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to capture screenshot from command");
-            DService.Instance().Chat.PrintError($"[Pocket Station] Screenshot failed: {ex.Message}");
+            DService.Instance().Chat.PrintError($"[Pocket Station] 截图失败：{ex.Message}");
         }
     }
 
@@ -188,11 +213,11 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        ImGui.TextUnformatted("LAN mobile console");
+        ImGui.TextUnformatted("局域网移动控制台");
         ImGui.Separator();
 
         var lanEnabled = configuration.LanEnabled;
-        if (ImGui.Checkbox("Enable LAN server", ref lanEnabled))
+        if (ImGui.Checkbox("启用局域网服务器", ref lanEnabled))
         {
             configuration.LanEnabled = lanEnabled;
             SaveConfiguration();
@@ -200,25 +225,25 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         var requireToken = configuration.RequireToken;
-        if (ImGui.Checkbox("Require token", ref requireToken))
+        if (ImGui.Checkbox("需要令牌", ref requireToken))
         {
             configuration.RequireToken = requireToken;
             SaveConfiguration();
         }
 
         var port = configuration.Port;
-        if (ImGui.InputInt("Port", ref port))
+        if (ImGui.InputInt("端口", ref port))
         {
             configuration.Port = port;
             configuration.Normalize();
             SaveConfiguration();
         }
 
-        if (ImGui.Button("Restart server"))
+        if (ImGui.Button("重启服务器"))
             RestartServer();
 
         ImGui.SameLine();
-        if (ImGui.Button("Rotate token"))
+        if (ImGui.Button("更换令牌"))
         {
             configuration.Token = AuthToken.Create();
             SaveConfiguration();
@@ -226,23 +251,23 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Live Stream");
+        ImGui.TextUnformatted("实时串流");
         var streamFps = configuration.StreamFps;
-        if (ImGui.SliderInt("Stream FPS", ref streamFps, 1, 120))
+        if (ImGui.SliderInt("串流帧率", ref streamFps, 1, 120))
         {
             configuration.StreamFps = streamFps;
             SaveConfiguration();
         }
 
         ImGui.Separator();
-        ImGui.TextUnformatted($"Clients: {webServer.ClientCount}");
-        ImGui.TextUnformatted($"Token: {configuration.Token}");
+        ImGui.TextUnformatted($"已连接客户端：{webServer.ClientCount}");
+        ImGui.TextUnformatted($"令牌：{configuration.Token}");
 
         foreach (var url in webServer.AccessUrls)
         {
             ImGui.TextWrapped(url);
             ImGui.SameLine();
-            if (ImGui.SmallButton($"Copy##{url}"))
+            if (ImGui.SmallButton($"复制##{url}"))
                 ImGui.SetClipboardText(url);
         }
 
@@ -252,7 +277,7 @@ public sealed class Plugin : IDalamudPlugin
         var accessUrls = webServer.AccessUrls;
         if (accessUrls.Count > 0)
         {
-            ImGui.TextUnformatted("Scan to connect");
+            ImGui.TextUnformatted("扫码连接");
             var firstUrl = accessUrls[0];
 
             // Regenerate QR only when URL changes (using QRCoder)
@@ -268,16 +293,14 @@ public sealed class Plugin : IDalamudPlugin
         // ── Command shortcut management ──────────────────────
         ShortcutManagerUi.Draw(configuration.CommandShortcuts, SaveConfiguration);
 
-        ImGui.Separator();
-        ImGui.TextWrapped("LAN Web can receive chat, send chat or commands, request screenshots, and save custom chat filter modes.");
 
         ImGui.End();
     }
 
-    internal static List<Protocol.DalamudPluginInfo> GetInstalledPlugins()
+    internal static List<Domain.DalamudPluginInfo> GetInstalledPlugins()
     {
         return PluginInterface.InstalledPlugins
-            .Select(p => new Protocol.DalamudPluginInfo(
+            .Select(p => new Domain.DalamudPluginInfo(
                 p.InternalName,
                 p.Name,
                 p.Version?.ToString() ?? "?",
