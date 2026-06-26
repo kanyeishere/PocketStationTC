@@ -105,7 +105,7 @@ jobs:
           if (-not (Test-Path "latest.zip")) { throw "latest.zip was not created!" }
           Write-Host "latest.zip created: $(Get-Item latest.zip | Select-Object Length)"
 
-      - name: Generate pluginmaster_entry.json (release artifact)
+      - name: Generate pluginmaster.json (release artifact)
         run: |
           $version = "${{ steps.version.outputs.version }}"
           $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
@@ -128,11 +128,11 @@ jobs:
             DownloadLinkUpdate     = $downloadUrl
           }
 
-          $entry | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster_entry.json"
-          Write-Host "=== pluginmaster_entry.json ==="
-          Get-Content "pluginmaster_entry.json"
+          $entry | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster.json"
+          Write-Host "=== pluginmaster.json ==="
+          Get-Content "pluginmaster.json"
 
-          if (-not (Test-Path "pluginmaster_entry.json")) { throw "pluginmaster_entry.json was not created!" }
+          if (-not (Test-Path "pluginmaster.json")) { throw "pluginmaster.json was not created!" }
 
       - name: Create Release & Upload Assets
         env:
@@ -153,7 +153,7 @@ jobs:
           Write-Host "Uploading latest.zip..."
           gh release upload "$tag" "latest.zip" --clobber
 
-          Write-Host "Uploading pluginmaster_entry.json..."
-          gh release upload "$tag" "pluginmaster_entry.json" --clobber
+          Write-Host "Uploading pluginmaster.json..."
+          gh release upload "$tag" "pluginmaster.json" --clobber
 
           Write-Host "All assets uploaded successfully."
