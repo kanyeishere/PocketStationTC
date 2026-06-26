@@ -41,8 +41,39 @@ jobs:
         run: |
           $dalamudDir = "$env:APPDATA\XIVLauncherCN\addon\Hooks\dev"
           New-Item -ItemType Directory -Force -Path $dalamudDir
-          Invoke-WebRequest -Uri "https://ottercorp.github.io/dalamud-distrib/canary/latest.zip" -OutFile "$env:TEMP\dalamud.zip"
+          Invoke-WebRequest -Uri "https://ottercorp.github.io/dalamud-distrib/stg/latest.zip" -OutFile "$env:TEMP\dalamud.zip"
           Expand-Archive -Force "$env:TEMP\dalamud.zip" -DestinationPath $dalamudDir
+
+      - name: Upgrade Lumina.Excel for OmenTools compatibility
+        run: |
+          $dalamudDir = "$env:APPDATA\XIVLauncherCN\addon\Hooks\dev"
+          $nugetCache = "$HOME\.nuget\packages\lumina.excel"
+
+          $csproj = "$env:TEMP\lumina_fetch\lumina_fetch.csproj"
+          New-Item -ItemType Directory -Force -Path "$env:TEMP\lumina_fetch" | Out-Null
+
+          if (-not (Test-Path "$nugetCache\7.4.3")) {
+            Write-Host "Downloading Lumina.Excel 7.4.3 from NuGet..."
+            @"
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Lumina.Excel" Version="7.4.3" />
+  </ItemGroup>
+</Project>
+"@ | Set-Content $csproj
+            dotnet restore "$csproj" 2>&1 | Out-Null
+          }
+
+          $luminaDll = Get-ChildItem -Recurse "$nugetCache\7.4.3" -Filter "Lumina.Excel.dll" | Select-Object -First 1
+          if ($luminaDll) {
+            Copy-Item $luminaDll.FullName "$dalamudDir\Lumina.Excel.dll" -Force
+            Write-Host "Replaced Lumina.Excel.dll with version 7.4.3 (has Lumina.Excel.Sheets)"
+          } else {
+            Write-Host "WARNING: Could not find Lumina.Excel 7.4.3, using distrib version"
+          }
 
       - name: Build Plugin
         run: dotnet build --configuration Release
