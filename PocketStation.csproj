@@ -51,7 +51,12 @@
 
   <ItemGroup>
     <None Update="PocketStation.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <!-- Copy OmenTools transitive dependencies (not covered by CopyLocalLockFileAssemblies=false) -->
@@ -64,6 +69,12 @@
       <_OmenToolsDep Include="$(_OmenOutDir)TinyPinyin.dll" Condition="Exists('$(_OmenOutDir)TinyPinyin.dll')" />
     </ItemGroup>
     <Copy SourceFiles="@(_OmenToolsDep)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Copy QRCoder NuGet dependency -->
+  <Target Name="CopyQRCoder" AfterTargets="Build">
+    <Copy SourceFiles="$(NuGetPackageRoot)qrcoder\1.6.0\lib\net6.0\QRCoder.dll"
+          DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

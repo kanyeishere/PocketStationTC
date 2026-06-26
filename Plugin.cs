@@ -1,5 +1,8 @@
+using System.Collections;
+using System.Numerics;
 using System.Text.Json;
 using Dalamud.Bindings.ImGui;
+using QRCoder;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -46,6 +49,10 @@ public sealed class Plugin : IDalamudPlugin
 
     private bool showConfig;
     private bool disposed;
+
+    // QR code cache — regenerated when access URLs change
+    private bool[,]? _qrMatrix;
+    private string? _qrUrl;
 
     public Plugin()
     {
@@ -174,7 +181,7 @@ public sealed class Plugin : IDalamudPlugin
         if (!showConfig)
             return;
 
-        ImGui.SetNextWindowSize(new System.Numerics.Vector2(520, 420), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new System.Numerics.Vector2(520, 680), ImGuiCond.FirstUseEver);
         if (!ImGui.Begin("Pocket Station", ref showConfig))
         {
             ImGui.End();
@@ -240,6 +247,28 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         ImGui.Separator();
+
+        // ── QR code ──────────────────────────────────────────
+        var accessUrls = webServer.AccessUrls;
+        if (accessUrls.Count > 0)
+        {
+            ImGui.TextUnformatted("Scan to connect");
+            var firstUrl = accessUrls[0];
+
+            // Regenerate QR only when URL changes (using QRCoder)
+            if (_qrMatrix == null || _qrUrl != firstUrl)
+            {
+                _qrUrl = firstUrl;
+                _qrMatrix = GenerateQrMatrix(firstUrl);
+            }
+
+            DrawQrCode(_qrMatrix, 200f);
+        }
+
+        // ── Command shortcut management ──────────────────────
+        ShortcutManagerUi.Draw(configuration.CommandShortcuts, SaveConfiguration);
+
+        ImGui.Separator();
         ImGui.TextWrapped("LAN Web can receive chat, send chat or commands, request screenshots, and save custom chat filter modes.");
 
         ImGui.End();
@@ -266,5 +295,60 @@ public sealed class Plugin : IDalamudPlugin
     private void SaveConfiguration()
     {
         PluginInterface.SavePluginConfig(configuration);
+    }
+
+    /// <summary>Generate QR matrix using QRCoder library.</summary>
+    private static bool[,] GenerateQrMatrix(string text)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.M);
+        var matrix = data.ModuleMatrix;
+        int size = matrix.Count;
+        var result = new bool[size, size];
+        for (int r = 0; r < size; r++)
+        {
+            var row = matrix[r];
+            for (int c = 0; c < size; c++)
+                result[r, c] = row[c];
+        }
+        return result;
+    }
+
+    /// <summary>Render a QR code matrix using ImGui draw list.</summary>
+    private static void DrawQrCode(bool[,] matrix, float maxSize)
+    {
+        int size = matrix.GetLength(0);
+        const int quietZone = 4; // modules of white border on each side
+
+        float available = maxSize;
+        float moduleSize = available / (size + quietZone * 2);
+        float totalSize = moduleSize * (size + quietZone * 2);
+
+        var cursor = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+
+        // White background (quiet zone)
+        drawList.AddRectFilled(cursor, cursor + new Vector2(totalSize), 0xFFFFFFFF);
+
+        // Dark modules
+        uint darkColor = 0xFF000000;
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (matrix[r, c])
+                {
+                    float x = cursor.X + (c + quietZone) * moduleSize;
+                    float y = cursor.Y + (r + quietZone) * moduleSize;
+                    drawList.AddRectFilled(
+                        new Vector2(x, y),
+                        new Vector2(x + moduleSize, y + moduleSize),
+                        darkColor);
+                }
+            }
+        }
+
+        // Advance cursor past the rendered area
+        ImGui.Dummy(new Vector2(totalSize, totalSize));
     }
 }
