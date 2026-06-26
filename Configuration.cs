@@ -19,6 +19,7 @@ public sealed class Configuration : IPluginConfiguration
     public int StreamFps { get; set; } = 30;
     public string SelectedChatModeId { get; set; } = ChatFilterDefaults.AllId;
     public List<ChatFilterMode> ChatFilterModes { get; set; } = [];
+    public List<CommandShortcut> CommandShortcuts { get; set; } = [];
 
     public void Normalize()
     {
@@ -44,5 +45,7 @@ public sealed class Configuration : IPluginConfiguration
             StreamFps = 30;
 
         ChatFilterDefaults.EnsureDefaults(this);
+
+        CommandShortcutDefaults.EnsureDefaults(this);
     }
 }

@@ -285,6 +285,38 @@ textarea {
   gap: 8px;
 }
 
+.plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.plugin-name {
+  font-weight: 600;
+}
+
+.plugin-version {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
 .stat-name {
   font-weight: 700;
   margin-bottom: 6px;

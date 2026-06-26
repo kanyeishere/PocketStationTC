@@ -11,10 +11,12 @@ import type {
   ChatFilterMode,
   ChatFilterSettings,
   CommandResult,
+  CommandShortcut,
   ConnectionMode,
   Envelope,
   HealthInfo,
   PlayerSnapshot,
+  PluginInfo,
   ScreenshotReadyEvent
 } from "@/types";
 
@@ -46,6 +48,9 @@ export function usePocketStation() {
   const liveRunning = ref(false);
   const liveFrame = shallowRef<ImageBitmap | null>(null);
   const liveFrameSize = ref("");
+  const shortcuts = ref<CommandShortcut[]>([]);
+  const plugins = ref<PluginInfo[]>([]);
+  const pluginsLoaded = ref(false);
   let reconnectTimer: number | undefined;
 
   const currentMode = computed(() => {
@@ -225,6 +230,29 @@ export function usePocketStation() {
     }
   }
 
+  async function saveShortcuts(list: CommandShortcut[]) {
+    await postJson<CommandShortcut[]>("/api/shortcuts", list);
+    shortcuts.value = list;
+  }
+
+  async function loadShortcuts() {
+    try {
+      shortcuts.value = await getJson<CommandShortcut[]>("/api/shortcuts");
+    } catch {
+      shortcuts.value = [];
+    }
+  }
+
+  async function loadPlugins() {
+    try {
+      plugins.value = await getJson<PluginInfo[]>("/api/plugins");
+    } catch {
+      plugins.value = [];
+    } finally {
+      pluginsLoaded.value = true;
+    }
+  }
+
   async function sendChat(content: string, channel: string): Promise<boolean> {
     const outgoing = content.startsWith("/") || !channel ? content : `${channel} ${content}`;
     sendLoading.value = true;
@@ -267,6 +295,10 @@ export function usePocketStation() {
   async function selectMode(modeId: string) {
     currentModeId.value = modeId;
     await saveFilterSettings(filterModes.value, modeId, false);
+  }
+
+  async function sendShortcut(command: string) {
+    await sendChat(command, "");
   }
 
   async function saveMode(mode: ChatFilterMode) {
@@ -343,13 +375,20 @@ export function usePocketStation() {
     liveFrame,
     liveFrameSize,
     liveRunning,
+    loadPlugins,
+    loadShortcuts,
     requestScreenshot,
     saveMode,
+    saveShortcuts,
     selectMode,
     sendChat,
     sendEnvelope,
+    sendShortcut,
+    shortcuts,
     startStream,
-    stopStream
+    stopStream,
+    plugins,
+    pluginsLoaded
   };
 }
 

@@ -49,3 +49,9 @@ public sealed record SystemEvent(
     string Level,
     string Message,
     object? Data = null);
+
+public sealed record DalamudPluginInfo(
+    string InternalName,
+    string Name,
+    string Version,
+    bool IsLoaded);

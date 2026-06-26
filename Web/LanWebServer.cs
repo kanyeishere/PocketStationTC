@@ -363,6 +363,12 @@ public sealed class LanWebServer : IDisposable
             return;
         }
 
+        if (request.Method == "GET" && request.Path == "/api/plugins")
+        {
+            await WriteJsonAsync(stream, Plugin.GetInstalledPlugins(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (request.Method == "GET" && request.Path.StartsWith("/api/screen/latest.jpg", StringComparison.OrdinalIgnoreCase))
         {
             var latestPath = screenshotModule.LatestPath;
@@ -440,6 +446,36 @@ public sealed class LanWebServer : IDisposable
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "HTTP stream stop failed");
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (request.Method == "GET" && request.Path == "/api/shortcuts")
+        {
+            await WriteJsonAsync(stream, configuration.CommandShortcuts, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (request.Method == "POST" && request.Path == "/api/shortcuts")
+        {
+            try
+            {
+                var shortcuts = JsonSerializer.Deserialize<List<CommandShortcut>>(request.Body, Plugin.JsonOptions);
+                if (shortcuts == null)
+                {
+                    await WriteResponseAsync(stream, 400, "application/json", JsonBytes(new CommandResult(false, "Invalid shortcuts.")), cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                configuration.CommandShortcuts = shortcuts;
+                saveConfiguration();
+                await WriteJsonAsync(stream, new CommandResult(true, "shortcuts saved", shortcuts), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Failed to save shortcuts");
                 await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
             }
 

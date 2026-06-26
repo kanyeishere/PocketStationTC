@@ -1,4 +1,4 @@
-export type TabKey = "chat" | "state" | "screen" | "live" | "commands";
+export type TabKey = "chat" | "state" | "shortcuts" | "live" | "commands";
 export type ConnectionMode = "" | "online" | "offline";
 
 export interface Envelope<TPayload = unknown> {
@@ -98,4 +98,17 @@ export interface HealthInfo {
 export interface StreamConfig {
   fps: number;
   running: boolean;
+}
+
+export interface CommandShortcut {
+  id: string;
+  label: string;
+  command: string;
+}
+
+export interface PluginInfo {
+  internalName: string;
+  name: string;
+  version: string;
+  isLoaded: boolean;
 }

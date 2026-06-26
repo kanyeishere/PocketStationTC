@@ -240,6 +240,17 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.End();
     }
 
+    internal static List<Protocol.DalamudPluginInfo> GetInstalledPlugins()
+    {
+        return PluginInterface.InstalledPlugins
+            .Select(p => new Protocol.DalamudPluginInfo(
+                p.InternalName,
+                p.Name,
+                p.Version?.ToString() ?? "?",
+                p.IsLoaded))
+            .ToList();
+    }
+
     private void RestartServer()
     {
         webServer.StopAsync().GetAwaiter().GetResult();

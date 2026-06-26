@@ -8,4 +8,6 @@ public sealed record StartStreamCommand(int Fps = 30);
 
 public sealed record StopStreamCommand;
 
+public sealed record CommandShortcut(string Id, string Label, string Command);
+
 public sealed record CommandResult(bool Ok, string Message, object? Data = null);
