@@ -9,7 +9,7 @@
 
 ## 📖 简介 | Introduction
 
-**Pocket Station** 是一个 FFXIV Dalamud 插件，在你的游戏内运行一个局域网 Web 服务器。你可以用手机、平板或笔记本电脑连接上来，实时查看游戏聊天、角色状态、发送指令，甚至让手机成为您 FFXIV 自动化的终端。
+**Pocket Station** 是一个 FFXIV Dalamud 插件，在你的游戏内运行一个局域网 Web 服务器。你可以用手机、平板或笔记本电脑连接上来，实时查看游戏聊天、角色状态、发送指令、直播游戏画面，甚至让手机成为您 FFXIV 自动化的终端。
 
 **Pocket Station** runs a local LAN web server inside FFXIV. Connect from any phone, tablet, or laptop on the same network to monitor game chat, view player state, send commands, capture screenshots, or stream your game screen live — like having a handheld console in your pocket.
 
