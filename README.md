@@ -26,7 +26,7 @@
 | ⌨️ **指令快捷方式** Command Shortcuts | 预设常用指令按钮（如自动排本、收取潜水艇），一键从手机发送到游戏执行 |
 | 🔌 **插件管理** Plugin Manager | 查看和开关已安装的 Dalamud 插件 |
 | 🤖 **DailyRoutines 集成** | 浏览和开关 DailyRoutines 自动化模块 |
-| 📋 **自定义指令** Commands | 在手机上输入任意指令发送到游戏执行（仅限白名单模式） |
+| 📋 **自定义指令** Commands | 在手机上输入任意指令发送到游戏执行 |
 | 🔐 **Token 鉴权** Auth | 支持 Token 认证，保护局域网访问安全 |
 
 ---
