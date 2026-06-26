@@ -4,8 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-      - '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example 1.5.2.2'
+        required: true
+        default: '1.0.0.0'
 
 permissions:
   contents: write
@@ -27,21 +31,45 @@ jobs:
           submodules: recursive
           token: ${{ github.token }}
 
-      - name: Update version from tag
+      - name: Resolve version
+        id: version
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^v', ''
-          Write-Host "Tag: $tag → Version: $version"
+          $version = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = "${{ github.ref_name }}"
+            if ($version.StartsWith("v")) {
+              $version = $version.Substring(1)
+            }
+          }
 
+          $parsedVersion = $null
+          if (-not [System.Version]::TryParse($version, [ref]$parsedVersion)) {
+            throw "Version '$version' is not a valid System.Version value. Supply it via workflow_dispatch input or use a tag like v1.5.2.2."
+          }
+
+          Write-Host "Resolved version: $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Update version in JSON files
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Write-Host "Updating JSON files to version $version"
+
+          # Update pluginmaster.json (array of plugin entries)
           $pm = Get-Content -Raw "pluginmaster.json" | ConvertFrom-Json
           $pm[0].AssemblyVersion = $version
           $pm[0].TestingAssemblyVersion = $version
-          $pm | ConvertTo-Json | Set-Content "pluginmaster.json"
+          $pm | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster.json"
+          Write-Host "Updated pluginmaster.json"
 
+          # Update PocketStation.json (single plugin manifest)
           $ps = Get-Content -Raw "PocketStation.json" | ConvertFrom-Json
           $ps.AssemblyVersion = $version
-          $ps | ConvertTo-Json | Set-Content "PocketStation.json"
+          $ps | ConvertTo-Json -Depth 10 | Set-Content "PocketStation.json"
+          Write-Host "Updated PocketStation.json"
 
+          # Commit and push the version bump
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pluginmaster.json PocketStation.json
@@ -77,8 +105,7 @@ jobs:
 
       - name: Generate pluginmaster_entry.json (release artifact)
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^v', ''
+          $version = "${{ steps.version.outputs.version }}"
           $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
           $downloadUrl = "$repoUrl/releases/latest/download/latest.zip"
 
@@ -99,7 +126,7 @@ jobs:
             DownloadLinkUpdate     = $downloadUrl
           }
 
-          $entry | ConvertTo-Json | Set-Content "pluginmaster_entry.json"
+          $entry | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster_entry.json"
           Write-Host "=== pluginmaster_entry.json ==="
           Get-Content "pluginmaster_entry.json"
 
@@ -109,7 +136,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.version.outputs.tag }}"
           $existing = gh release view "$tag" --json id 2>$null
           if ($existing) {
             Write-Host "Release $tag already exists, uploading additional assets..."
