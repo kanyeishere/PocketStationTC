@@ -128,7 +128,7 @@ jobs:
             DownloadLinkUpdate     = $downloadUrl
           }
 
-          $entry | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster.json"
+          @($entry) | ConvertTo-Json -Depth 10 | Set-Content "pluginmaster.json"
           Write-Host "=== pluginmaster.json ==="
           Get-Content "pluginmaster.json"
 
