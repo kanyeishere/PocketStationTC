@@ -33,6 +33,8 @@
 
 ## 🚀 快速开始 | Quick Start
 
+
+0. 添加裤链 `https://github.com/kanyeishere/PocketStation/releases/latest/download/pluginmaster.json`
 1. 在 Dalamud 插件中心安装 **Pocket Station**
 2. 打开插件设置 (`/ps` 或 `/pocketstation`)
 3. 确认 **Enable LAN server** 已开启，记下显示的 URL（例如 `http://192.168.1.5:8787`）
