@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <DefaultItemExcludes>$(DefaultItemExcludes);frontend\node_modules\**;frontend\dist\**;OmenTools\**;OmenTools\**\*</DefaultItemExcludes>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <RootNamespace>PocketStation</RootNamespace>
@@ -43,7 +44,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\JiaTools\OmenTools\OmenTools.csproj" />
+    <ProjectReference Include="OmenTools\OmenTools.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,11 +52,4 @@
     <None Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <Target Name="CopyOmenToolsRuntimeDependencies" AfterTargets="Build">
-    <ItemGroup>
-      <OmenToolsRuntimeDependency Include="..\JiaTools\OmenTools\bin\$(Configuration)\GuerrillaNtp.dll" />
-      <OmenToolsRuntimeDependency Include="..\JiaTools\OmenTools\bin\$(Configuration)\TinyPinyin.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(OmenToolsRuntimeDependency)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-  </Target>
 </Project>

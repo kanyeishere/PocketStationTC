@@ -1,100 +1,14 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101418">
-  <title>Pocket Station</title>
-  <link rel="stylesheet" href="/styles.css?v=8">
-</head>
-<body>
-  <main class="app">
-    <header class="topbar">
-      <div>
-        <div class="title">Pocket Station</div>
-        <div id="connection" class="connection">连接中</div>
-      </div>
-      <button id="refresh" class="icon-button" type="button" title="刷新">↻</button>
-    </header>
-
-    <section id="tab-chat" class="view active">
-      <div class="chat-filter-bar">
-        <select id="chat-mode" class="mode-select" aria-label="聊天筛选模式"></select>
-        <button id="toggle-filter-editor" type="button">筛选</button>
-      </div>
-      <div id="filter-editor" class="filter-editor hidden">
-        <input id="mode-name" autocomplete="off" placeholder="模式名称">
-        <details class="type-details">
-          <summary>消息类型</summary>
-          <div id="type-palette" class="type-palette"></div>
-        </details>
-        <div class="keyword-grid">
-          <textarea id="mode-include" rows="2" placeholder="包含关键词"></textarea>
-          <textarea id="mode-exclude" rows="2" placeholder="排除关键词"></textarea>
-        </div>
-        <div class="editor-actions">
-          <button id="save-mode" type="button">保存</button>
-          <button id="new-mode" type="button">另存</button>
-          <button id="delete-mode" type="button">删除</button>
-          <span id="mode-meta"></span>
-        </div>
-      </div>
-      <div id="chat-list" class="chat-list"></div>
-      <form id="chat-form" class="composer">
-        <select id="chat-channel" class="channel-select" aria-label="发送频道">
-          <option value="">当前</option>
-          <option value="/s">说话</option>
-          <option value="/p">小队</option>
-          <option value="/fc">部队</option>
-          <option value="/r">回复</option>
-          <option value="/l">通讯贝</option>
-          <option value="/cwl">跨服贝</option>
-          <option value="/e">仅自己</option>
-        </select>
-        <input id="chat-input" autocomplete="off" placeholder="输入聊天内容或任意指令">
-        <button id="send-chat" type="submit">发送</button>
-      </form>
-    </section>
-
-    <section id="tab-state" class="view">
-      <div class="section-title">自身</div>
-      <div id="player-card" class="panel"></div>
-      <div class="section-title">目标</div>
-      <div id="target-card" class="panel"></div>
-      <div class="section-title">小队</div>
-      <div id="party-list" class="list"></div>
-    </section>
-
-    <section id="tab-screen" class="view">
-      <div class="screen-toolbar">
-        <button id="capture" type="button">请求截图</button>
-        <span id="screen-meta"></span>
-      </div>
-      <div class="screen-frame">
-        <img id="screen-image" alt="游戏截图">
-      </div>
-    </section>
-
-    <section id="tab-commands" class="view">
-      <div class="section-title">快捷指令</div>
-      <div class="command-grid">
-        <button data-command="/e Pocket Station online" type="button">Echo</button>
-        <button data-command="/p " type="button">小队频道</button>
-        <button data-command="/fc " type="button">部队频道</button>
-        <button data-command="/r " type="button">回复私聊</button>
-      </div>
-      <div class="section-title">服务器</div>
-      <pre id="server-info" class="panel pre"></pre>
-    </section>
-  </main>
-
-  <nav class="bottom-tabs">
-    <button class="active" data-tab="chat" type="button">聊天</button>
-    <button data-tab="state" type="button">状态</button>
-    <button data-tab="screen" type="button">画面</button>
-    <button data-tab="commands" type="button">指令</button>
-  </nav>
-
-  <script src="/app.js?v=8"></script>
-</body>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#101418">
+    <title>Pocket Station</title>
+    <script type="module" crossorigin src="/assets/index-DJIgDzql.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C2zR3r10.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
 </html>
