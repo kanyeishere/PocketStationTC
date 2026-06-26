@@ -1,0 +1,55 @@
+name: PR Build Check
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download Dalamud CN Dev DLLs
+        run: |
+          $dalamudDir = "$env:APPDATA\XIVLauncherCN\addon\Hooks\dev"
+          New-Item -ItemType Directory -Force -Path $dalamudDir
+          Invoke-WebRequest -Uri "https://ottercorp.github.io/dalamud-distrib/stg/latest.zip" -OutFile "$env:TEMP\dalamud.zip"
+          Expand-Archive -Force "$env:TEMP\dalamud.zip" -DestinationPath $dalamudDir
+
+      - name: Build Plugin
+        run: dotnet build --configuration Release
+
+      - name: Store Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-PocketStation
+          path: bin\Release\*
+          retention-days: 1

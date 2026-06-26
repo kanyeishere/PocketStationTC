@@ -1,0 +1,128 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download Dalamud CN Dev DLLs
+        run: |
+          $dalamudDir = "$env:APPDATA\XIVLauncherCN\addon\Hooks\dev"
+          New-Item -ItemType Directory -Force -Path $dalamudDir
+          Invoke-WebRequest -Uri "https://ottercorp.github.io/dalamud-distrib/stg/latest.zip" -OutFile "$env:TEMP\dalamud.zip"
+          Expand-Archive -Force "$env:TEMP\dalamud.zip" -DestinationPath $dalamudDir
+
+      - name: Build Plugin
+        run: dotnet build --configuration Release
+
+      - name: Package Plugin
+        run: |
+          Compress-Archive -Path "bin\Release\*" -DestinationPath "latest.zip" -Force
+          # Verify the zip is valid
+          if (-not (Test-Path "latest.zip")) { throw "latest.zip was not created!" }
+          Write-Host "latest.zip created: $(Get-Item latest.zip | Select-Object Length)"
+
+      - name: Generate pluginmaster.json
+        run: |
+          $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
+          $downloadUrl = "$repoUrl/releases/latest/download/latest.zip"
+          Write-Host "Repo URL : $repoUrl"
+          Write-Host "Download : $downloadUrl"
+
+          # Read version from built assembly
+          $pluginPath = "bin\Release\PocketStation.dll"
+          if (-not (Test-Path $pluginPath)) { throw "DLL not found: $pluginPath" }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($pluginPath).FileVersion
+          if (-not $version) { throw "Could not read version from DLL" }
+          Write-Host "Assembly version: $version"
+
+          # Read plugin manifest
+          $manifest = Get-Content -Raw "PocketStation.json" | ConvertFrom-Json
+
+          $entry = @{
+            Author                 = $manifest.Author
+            Name                   = $manifest.Name
+            Punchline              = $manifest.Punchline
+            Description            = $manifest.Description
+            InternalName           = $manifest.InternalName
+            AssemblyVersion        = $version
+            TestingAssemblyVersion = $version
+            ApplicableVersion      = $manifest.ApplicableVersion
+            Tags                   = $manifest.Tags
+            DalamudApiLevel        = 15
+            RepoUrl                = $repoUrl
+            DownloadLinkInstall    = $downloadUrl
+            DownloadLinkTesting    = $downloadUrl
+            DownloadLinkUpdate     = $downloadUrl
+          }
+
+          # Write JSON
+          $json = $entry | ConvertTo-Json
+          $json | Set-Content "pluginmaster_entry.json"
+          Write-Host "=== pluginmaster_entry.json ==="
+          Get-Content "pluginmaster_entry.json"
+
+          if (-not (Test-Path "pluginmaster_entry.json")) { throw "pluginmaster_entry.json was not created!" }
+
+      - name: Create Release & Upload Assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+
+          # Determine if a release already exists
+          $existing = gh release view "$tag" --json id 2>$null
+          if ($existing) {
+            Write-Host "Release $tag already exists, uploading additional assets..."
+          } else {
+            Write-Host "Creating new release $tag..."
+            gh release create "$tag" `
+              --title "$tag" `
+              --generate-notes `
+              --latest
+          }
+
+          # Upload assets one by one so we can see any failures
+          Write-Host "Uploading latest.zip..."
+          gh release upload "$tag" "latest.zip" --clobber
+
+          Write-Host "Uploading pluginmaster_entry.json..."
+          gh release upload "$tag" "pluginmaster_entry.json" --clobber
+
+          Write-Host "All assets uploaded successfully."

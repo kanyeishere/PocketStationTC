@@ -1,0 +1,63 @@
+# Build output
+bin/
+obj/
+artifacts/
+node_modules/
+frontend/dist/
+
+# .NET generated files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# IDEs
+.vs/
+.idea/
+*.sln.iml
+*.DotSettings.user
+
+# Rider/ReSharper caches
+_ReSharper*/
+*.ReSharper
+
+# Logs and diagnostics
+*.log
+*.tlog
+*.binlog
+TestResults/
+coverage/
+coverage.*
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local plugin/runtime scratch data
+pluginConfigs/
+web-cache/
+*.tmp
+*.temp
+
+# NuGet packages restored outside the global cache
+packages/
+*.nupkg
+
+# Agent IDE / Reasonix config
+.reasonix/
+reasonix.toml
+
+# OmenTools submodule build output (not needed in parent repo)
+OmenTools/bin/
+OmenTools/obj/
+
+# Publish/package output
+publish/
+Release/
+Debug/
