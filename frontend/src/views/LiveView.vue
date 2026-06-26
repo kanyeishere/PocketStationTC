@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 
 const props = defineProps<{
   isActive: boolean;
@@ -15,8 +15,33 @@ const emit = defineEmits<{
 }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
+const screenFrame = ref<HTMLDivElement | null>(null);
 const fpsInput = ref(props.fps);
+const isFullscreen = ref(false);
 let animating = false;
+
+function onFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement;
+}
+
+onMounted(() => {
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("fullscreenchange", onFullscreenChange);
+});
+
+async function toggleFullscreen() {
+  if (!props.running) return;
+  if (isFullscreen.value) {
+    await document.exitFullscreen();
+  } else {
+    const el = screenFrame.value;
+    if (!el) return;
+    await el.requestFullscreen();
+  }
+}
 
 function clampFps() {
   const n = typeof fpsInput.value === "number" ? fpsInput.value : parseInt(String(fpsInput.value), 10);
@@ -106,7 +131,12 @@ watch(() => props.isActive, (active, _prev) => {
       </label>
       <span>{{ running ? `● ${frameSize}` : "○ 未推流" }}</span>
     </div>
-    <div class="screen-frame">
+    <div
+      ref="screenFrame"
+      class="screen-frame"
+      :class="{ 'is-fullscreen': isFullscreen, 'can-fullscreen': running }"
+      @click="toggleFullscreen"
+    >
       <canvas
         v-show="running"
         ref="canvas"
@@ -115,11 +145,71 @@ watch(() => props.isActive, (active, _prev) => {
       <div v-if="!running" class="live-placeholder">
         点击「开始直播」启动实时视频流
       </div>
+      <div v-if="running && !isFullscreen" class="fullscreen-hint">
+        ⛶ 点击画面全屏
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
+.screen-frame {
+  position: relative;
+}
+
+.screen-frame.can-fullscreen {
+  cursor: pointer;
+}
+
+.live-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 全屏状态下 canvas 铺满 */
+.screen-frame.is-fullscreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.screen-frame.is-fullscreen .live-canvas {
+  width: auto;
+  height: auto;
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+}
+
+.live-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim, #888);
+  font-size: 0.875rem;
+  min-height: 200px;
+}
+
+.fullscreen-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ccc;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+/* 全屏时隐藏提示 */
+.screen-frame.is-fullscreen .fullscreen-hint {
+  display: none;
+}
+
 .fps-label {
   display: inline-flex;
   align-items: center;
@@ -138,19 +228,6 @@ watch(() => props.isActive, (active, _prev) => {
   color: var(--text-color, #eee);
   text-align: center;
 }
-
-.live-canvas {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.live-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-dim, #888);
-  font-size: 0.875rem;
-  min-height: 200px;
-}
 </style>
+
+
