@@ -14,6 +14,7 @@ public sealed class CommandDispatcher
 
     public Func<int, Task>? OnStartStream { get; set; }
     public Func<Task>? OnStopStream { get; set; }
+    public Func<string, bool, Task<string?>>? OnTogglePlugin { get; set; }
 
     public CommandDispatcher(
         Configuration configuration,
@@ -35,6 +36,8 @@ public sealed class CommandDispatcher
             "cmd.requestScreenshot" => await DispatchScreenshotAsync(envelope.Payload, cancellationToken).ConfigureAwait(false),
             "cmd.startStream" => await DispatchStartStreamAsync(envelope.Payload).ConfigureAwait(false),
             "cmd.stopStream" => await DispatchStopStreamAsync().ConfigureAwait(false),
+            "cmd.enablePlugin" => await DispatchTogglePluginAsync(envelope.Payload, true).ConfigureAwait(false),
+            "cmd.disablePlugin" => await DispatchTogglePluginAsync(envelope.Payload, false).ConfigureAwait(false),
             "cmd.ping" => new CommandResult(true, "pong", new { serverTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }),
             _ => new CommandResult(false, $"Unknown command type: {envelope.Type}")
         };
@@ -132,5 +135,31 @@ public sealed class CommandDispatcher
             Plugin.Log.Error(ex, "StopStream command failed");
             return new CommandResult(false, $"stopStream failed: {ex.Message}");
         }
+    }
+
+    private async Task<CommandResult> DispatchTogglePluginAsync(JsonElement payload, bool enable)
+    {
+        var command = payload.Deserialize<TogglePluginCommand>(Plugin.JsonOptions);
+        var internalName = command?.InternalName?.Trim();
+        if (string.IsNullOrWhiteSpace(internalName))
+            return new CommandResult(false, "Plugin internal name is required.");
+
+        // Block self-disable
+        if (!enable && internalName.Equals("PocketStation", StringComparison.OrdinalIgnoreCase))
+            return new CommandResult(false, "Cannot disable Pocket Station from the web console.");
+
+        if (OnTogglePlugin == null)
+            return new CommandResult(false, "Plugin management is not available.");
+
+        var error = await OnTogglePlugin(internalName, enable).ConfigureAwait(false);
+        if (error != null)
+            return new CommandResult(false, error);
+
+        var action = enable ? "enabled" : "disabled";
+        var message = $"[Pocket Station] Plugin '{internalName}' was {action} by remote.";
+        Plugin.Log.Info(message);
+        game.PrintChat(message);
+
+        return new CommandResult(true, $"plugin {action}", new { internalName });
     }
 }

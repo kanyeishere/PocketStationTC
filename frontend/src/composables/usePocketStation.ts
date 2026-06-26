@@ -13,6 +13,7 @@ import type {
   CommandResult,
   CommandShortcut,
   ConnectionMode,
+  DailyRoutinesModule,
   Envelope,
   HealthInfo,
   PlayerSnapshot,
@@ -51,6 +52,8 @@ export function usePocketStation() {
   const shortcuts = ref<CommandShortcut[]>([]);
   const plugins = ref<PluginInfo[]>([]);
   const pluginsLoaded = ref(false);
+  const dailyRoutinesModules = ref<DailyRoutinesModule[]>([]);
+  const dailyRoutinesLoading = ref(false);
   let reconnectTimer: number | undefined;
 
   const currentMode = computed(() => {
@@ -253,6 +256,33 @@ export function usePocketStation() {
     }
   }
 
+  async function togglePlugin(internalName: string, enable: boolean): Promise<CommandResult> {
+    const action = enable ? "enable" : "disable";
+    return await postJson<CommandResult>(`/api/plugins/${encodeURIComponent(internalName)}/${action}`, {});
+  }
+
+  async function loadDailyRoutines() {
+    dailyRoutinesLoading.value = true;
+    try {
+      const data = await getJson<{ modules: DailyRoutinesModule[] }>("/api/dailyroutines");
+      dailyRoutinesModules.value = data.modules || [];
+    } catch {
+      dailyRoutinesModules.value = [];
+    } finally {
+      dailyRoutinesLoading.value = false;
+    }
+  }
+
+  async function toggleDailyRoutine(name: string, enable: boolean) {
+    const command = enable ? `/pdr load ${name}` : `/pdr unload ${name}`;
+    await sendChat(command, "");
+    // Optimistically update the local state
+    const mod = dailyRoutinesModules.value.find((m) => m.name === name);
+    if (mod) {
+      mod.enabled = enable;
+    }
+  }
+
   async function sendChat(content: string, channel: string): Promise<boolean> {
     const outgoing = content.startsWith("/") || !channel ? content : `${channel} ${content}`;
     sendLoading.value = true;
@@ -387,8 +417,13 @@ export function usePocketStation() {
     shortcuts,
     startStream,
     stopStream,
+    togglePlugin,
     plugins,
-    pluginsLoaded
+    pluginsLoaded,
+    dailyRoutinesModules,
+    dailyRoutinesLoading,
+    loadDailyRoutines,
+    toggleDailyRoutine
   };
 }
 

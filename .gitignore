@@ -57,6 +57,15 @@ reasonix.toml
 OmenTools/bin/
 OmenTools/obj/
 
+# Frontend build artifacts (not needed in repo)
+frontend/tsconfig.tsbuildinfo
+frontend/tsconfig.node.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Temp / scratch
+lib/temp_decomp/
+
 # But keep lib/ — committed Dalamud reference DLLs for CI
 !lib/
 

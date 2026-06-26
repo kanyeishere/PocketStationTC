@@ -17,7 +17,29 @@ const emit = defineEmits<{
 const canvas = ref<HTMLCanvasElement | null>(null);
 const fpsInput = ref(props.fps);
 let animating = false;
-let fpsDebounce: ReturnType<typeof setTimeout> | undefined;
+
+function clampFps() {
+  const n = typeof fpsInput.value === "number" ? fpsInput.value : parseInt(String(fpsInput.value), 10);
+  if (isNaN(n) || n < 1) {
+    fpsInput.value = props.fps || 30;
+  } else {
+    fpsInput.value = Math.max(1, Math.min(120, n));
+  }
+}
+
+function onFpsBlur() {
+  const old = fpsInput.value;
+  clampFps();
+  if (props.running && fpsInput.value !== old) {
+    emit("start", fpsInput.value);
+  }
+}
+
+function onFpsKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") {
+    (e.target as HTMLInputElement).blur();
+  }
+}
 
 watch(() => props.frame, (bitmap) => {
   if (!bitmap || !canvas.value) return;
@@ -44,19 +66,11 @@ watch(() => props.fps, (v) => {
   fpsInput.value = v;
 });
 
-// When user adjusts FPS while streaming, restart with the new rate
-watch(fpsInput, (v) => {
-  if (!props.running) return;
-  v = Math.max(1, Math.min(120, v || 30));
-  fpsInput.value = v;
-  clearTimeout(fpsDebounce);
-  fpsDebounce = setTimeout(() => emit("start", v), 400);
-});
-
 function toggleStream() {
   if (props.running) {
     emit("stop");
   } else {
+    clampFps();
     emit("start", fpsInput.value);
   }
 }
@@ -86,6 +100,8 @@ watch(() => props.isActive, (active, _prev) => {
           min="1"
           max="120"
           class="fps-input"
+          @blur="onFpsBlur"
+          @keydown="onFpsKeydown"
         >
       </label>
       <span>{{ running ? `● ${frameSize}` : "○ 未推流" }}</span>

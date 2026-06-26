@@ -1,6 +1,7 @@
 using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
+using OmenTools.Interop.Game.Lumina;
 using OmenTools.OmenService;
 using PocketStation.Protocol;
 
@@ -34,6 +35,11 @@ public sealed class GameFacade : IDisposable
         this.objectTable = objectTable;
         this.partyList = partyList;
         this.framework = framework;
+    }
+
+    public void PrintChat(string message)
+    {
+        chatGui.Print(message);
     }
 
     public void Initialize()
@@ -90,6 +96,7 @@ public sealed class GameFacade : IDisposable
                     member.EntityId,
                     member.EntityId,
                     member.ClassJob.RowId,
+                    LuminaWrapper.GetJobName(member.ClassJob.RowId),
                     member.Level,
                     member.CurrentHP,
                     member.MaxHP,
@@ -100,14 +107,24 @@ public sealed class GameFacade : IDisposable
                     ToStatusEvents(member.Statuses)));
         }
 
+        var currencies = CurrencyHelper.Capture();
+
+        var territoryName = LuminaWrapper.GetZonePlaceName(clientState.TerritoryType);
+        var worldName = LuminaWrapper.GetWorldName(GameState.CurrentWorld);
+        var dataCenterName = LuminaWrapper.GetWorldDCName(GameState.CurrentWorld);
+
         return new PlayerSnapshot(
             clientState.IsLoggedIn,
             clientState.TerritoryType,
             clientState.MapId,
+            territoryName,
+            worldName,
+            dataCenterName,
             local,
             target,
             party,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            currencies);
     }
 
     public void Dispose()
@@ -138,6 +155,7 @@ public sealed class GameFacade : IDisposable
             character.GameObjectId,
             character.EntityId,
             character.ClassJob.RowId,
+            LuminaWrapper.GetJobName(character.ClassJob.RowId),
             character.Level,
             character.CurrentHp,
             character.MaxHp,

@@ -76,19 +76,20 @@ public sealed class ScreenshotModule : IGameModule
         fps = Math.Clamp(fps, 1, 120);
         frameCallback = onFrame;
         streamCts = new CancellationTokenSource();
+        var token = streamCts.Token;
         isStreaming = true;
 
         var delayMs = 1000.0 / fps;
         streamTask = Task.Run(async () =>
         {
             var sw = Stopwatch.StartNew();
-            while (!streamCts.Token.IsCancellationRequested)
+            while (!token.IsCancellationRequested)
             {
                 var frameStart = sw.Elapsed.TotalMilliseconds;
 
                 try
                 {
-                    var frame = await CaptureFrameToMemoryAsync(streamCts.Token).ConfigureAwait(false);
+                    var frame = await CaptureFrameToMemoryAsync(token).ConfigureAwait(false);
                     if (frameCallback != null)
                         await frameCallback(frame).ConfigureAwait(false);
                 }
@@ -105,7 +106,7 @@ public sealed class ScreenshotModule : IGameModule
                 var delay = (int)Math.Max(1, delayMs - elapsed);
                 try
                 {
-                    await Task.Delay(delay, streamCts.Token).ConfigureAwait(false);
+                    await Task.Delay(delay, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -119,11 +120,10 @@ public sealed class ScreenshotModule : IGameModule
 
     public async Task StopStreamingAsync()
     {
+        // Cancel first, then wait for the task to finish before disposing/nullifying.
         if (streamCts != null)
         {
             await streamCts.CancelAsync().ConfigureAwait(false);
-            streamCts.Dispose();
-            streamCts = null;
         }
 
         if (streamTask != null)
@@ -132,6 +132,12 @@ public sealed class ScreenshotModule : IGameModule
             catch (OperationCanceledException) { }
             catch (Exception ex) { Plugin.Log.Error(ex, "Stream task finalization failed"); }
             streamTask = null;
+        }
+
+        if (streamCts != null)
+        {
+            streamCts.Dispose();
+            streamCts = null;
         }
 
         frameCallback = null;

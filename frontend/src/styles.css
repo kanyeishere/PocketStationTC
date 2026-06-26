@@ -301,6 +301,19 @@ textarea {
   border: 1px solid var(--line);
 }
 
+.plugin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plugin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
 .plugin-name {
   font-weight: 600;
 }
@@ -311,10 +324,119 @@ textarea {
   font-family: monospace;
 }
 
+.badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.badge-on {
+  background: #1a3a1a;
+  color: #6f6;
+}
+
+.badge-off {
+  background: #3a3a1a;
+  color: #cc6;
+}
+
+.btn-toggle {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+.btn-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-enable {
+  border-color: #3a6;
+  color: #3a6;
+}
+
+.btn-disable {
+  border-color: #c33;
+  color: #c33;
+}
+
+.btn-cancel {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.confirm-box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+}
+
+.confirm-box p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
 .empty {
   color: var(--muted);
   font-size: 13px;
   padding: 8px 0;
+}
+
+.currency-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.currency-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.currency-name {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.currency-count {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.currency-weekly {
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .stat-name {
@@ -322,26 +444,12 @@ textarea {
   margin-bottom: 6px;
 }
 
-.bars {
-  display: grid;
-  gap: 6px;
+.job-line {
+  grid-column: 1 / -1;
 }
 
-.bar {
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #0c1013;
-}
-
-.bar span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-
-.bar.mp span {
-  background: var(--accent-2);
+.muted {
+  color: var(--muted);
 }
 
 .meta-grid {
@@ -430,6 +538,89 @@ textarea {
   .command-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* ── Collapsible panels (Daily Routines / Dalamud Plugins) ─── */
+
+.collapsible-panel {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+}
+
+.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collapse-arrow {
+  font-size: 10px;
+  width: 12px;
+}
+
+.search-row {
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.search-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0b0f12;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--muted);
+}
+
+.scroll-list {
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toggle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.toggle-item.enabled {
+  border-color: #3a6;
+}
+
+.toggle-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.toggle-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #3a3a1a;
+  color: #cc6;
+}
+
+.toggle-item.enabled .toggle-badge {
+  background: #1a3a1a;
+  color: #6f6;
 }
 
 @media (max-width: 520px) {

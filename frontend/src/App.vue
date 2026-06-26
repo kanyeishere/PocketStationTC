@@ -39,8 +39,13 @@ const {
   sendChat,
   sendShortcut,
   shortcuts,
+  togglePlugin,
   plugins,
   pluginsLoaded,
+  dailyRoutinesModules,
+  dailyRoutinesLoading,
+  loadDailyRoutines,
+  toggleDailyRoutine,
   startStream,
   stopStream
 } = usePocketStation();
@@ -48,12 +53,14 @@ const {
 onMounted(() => {
   loadInitial();
   loadShortcuts();
+  loadDailyRoutines();
   connectWs();
 });
 
 watch(activeTab, (tab) => {
   if (tab === "state") {
     loadPlugins();
+    loadDailyRoutines();
   }
 });
 
@@ -97,6 +104,11 @@ function doSendShortcut(command: string) {
       :snapshot="snapshot"
       :plugins="plugins"
       :plugins-loaded="pluginsLoaded"
+      :toggle-plugin="togglePlugin"
+      :daily-routines-modules="dailyRoutinesModules"
+      :daily-routines-loading="dailyRoutinesLoading"
+      :toggle-daily-routine="toggleDailyRoutine"
+      @refresh-plugins="loadPlugins"
     />
 
     <ShortcutsView

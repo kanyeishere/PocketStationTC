@@ -5,6 +5,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using OmenTools;
+using OmenTools.Dalamud.Helpers;
 using PocketStation.Core;
 using PocketStation.Game;
 using PocketStation.Modules;
@@ -59,9 +60,12 @@ public sealed class Plugin : IDalamudPlugin
 
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
         screenshotModule = new ScreenshotModule(configuration, eventBus, configDirectory);
+        var dailyRoutines = new DailyRoutinesService(configDirectory);
         chatMonitor = new ChatMonitorModule(configuration, eventBus, game);
         playerState = new PlayerStateModule(configuration, eventBus, game, Framework);
         commandDispatcher = new CommandDispatcher(configuration, eventBus, game, screenshotModule);
+        commandDispatcher.OnTogglePlugin = (internalName, enable) =>
+            DalamudReflector.SetPluginStateAsync(internalName, enable);
 
         moduleHost = new PocketModuleHost();
         moduleHost.Add(chatMonitor);
@@ -77,6 +81,7 @@ public sealed class Plugin : IDalamudPlugin
             chatMonitor,
             playerState,
             screenshotModule,
+            dailyRoutines,
             staticRoot,
             SaveConfiguration);
 

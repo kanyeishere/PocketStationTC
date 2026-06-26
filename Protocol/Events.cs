@@ -20,6 +20,7 @@ public sealed record CharacterState(
     ulong ObjectId,
     uint EntityId,
     uint ClassJobId,
+    string ClassJobName,
     byte Level,
     uint CurrentHp,
     uint MaxHp,
@@ -33,10 +34,20 @@ public sealed record PlayerSnapshot(
     bool IsLoggedIn,
     uint TerritoryType,
     uint MapId,
+    string TerritoryName,
+    string WorldName,
+    string DataCenterName,
     CharacterState? LocalPlayer,
     CharacterState? Target,
     IReadOnlyList<CharacterState> Party,
-    long Timestamp);
+    long Timestamp,
+    IReadOnlyList<CurrencyInfo>? Currencies = null);
+
+public sealed record CurrencyInfo(
+    uint ItemId,
+    string Name,
+    uint Count,
+    string IconId);
 
 public sealed record ScreenshotReadyEvent(
     string Url,

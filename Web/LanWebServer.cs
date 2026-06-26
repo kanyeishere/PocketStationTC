@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using OmenTools;
 using PocketStation.Core;
+using PocketStation.Game;
 using PocketStation.Modules;
 using PocketStation.Protocol;
 
@@ -21,6 +22,7 @@ public sealed class LanWebServer : IDisposable
     private readonly ChatMonitorModule chatMonitor;
     private readonly PlayerStateModule playerState;
     private readonly ScreenshotModule screenshotModule;
+    private readonly DailyRoutinesService dailyRoutines;
     private readonly string staticRoot;
     private readonly Action saveConfiguration;
 
@@ -36,6 +38,7 @@ public sealed class LanWebServer : IDisposable
         ChatMonitorModule chatMonitor,
         PlayerStateModule playerState,
         ScreenshotModule screenshotModule,
+        DailyRoutinesService dailyRoutines,
         string staticRoot,
         Action saveConfiguration)
     {
@@ -45,6 +48,7 @@ public sealed class LanWebServer : IDisposable
         this.chatMonitor = chatMonitor;
         this.playerState = playerState;
         this.screenshotModule = screenshotModule;
+        this.dailyRoutines = dailyRoutines;
         this.staticRoot = staticRoot;
         this.saveConfiguration = saveConfiguration;
         webSocketHub = new WebSocketHub(eventBus);
@@ -264,125 +268,104 @@ public sealed class LanWebServer : IDisposable
             return;
         }
 
-        if (request.Method == "GET" && request.Path == "/api/health")
+        // Route to domain-specific handlers; each returns true if handled
+        if (await HandleHealthRouteAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleChatRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleStateRouteAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandlePluginRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleScreenRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleStreamRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleShortcutRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleDailyRoutinesRoutesAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+        if (await HandleCommandRouteAsync(stream, request, cancellationToken).ConfigureAwait(false)) return;
+
+        await ServeStaticAsync(stream, request, cancellationToken).ConfigureAwait(false);
+    }
+
+    // ── Route handlers ─────────────────────────────────────────
+
+    private async Task<bool> HandleHealthRouteAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        if (request.Method != "GET" || request.Path != "/api/health")
+            return false;
+
+        await WriteJsonAsync(stream, new
         {
-            await WriteJsonAsync(stream, new
-            {
-                ok = true,
-                lanEnabled = configuration.LanEnabled,
-                port = configuration.Port,
-                clients = webSocketHub.Count,
-                urls = AccessUrls
-            }, cancellationToken).ConfigureAwait(false);
-            return;
-        }
+            ok = true,
+            lanEnabled = configuration.LanEnabled,
+            port = configuration.Port,
+            clients = webSocketHub.Count,
+            urls = AccessUrls
+        }, ct).ConfigureAwait(false);
+        return true;
+    }
 
-        if (request.Method == "GET" && request.Path == "/api/debug/beep")
+    private async Task<bool> HandleChatRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        return request.Path switch
         {
-            Plugin.Log.Info("Pocket Station debug beep received from LAN client");
-            DService.Instance().Chat.Print("[Pocket Station] debug beep received from LAN client");
-            await WriteJsonAsync(stream, new
-            {
-                ok = true,
-                message = "beep received",
-                serverTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            }, cancellationToken).ConfigureAwait(false);
-            return;
-        }
+            "/api/chat/send" when request.Method is "POST" or "GET" => await HandleChatSendAsync(stream, request, ct).ConfigureAwait(false),
+            "/api/chat/history" when request.Method == "GET" => await HandleChatHistoryAsync(stream, ct).ConfigureAwait(false),
+            "/api/chat/modes" when request.Method == "GET" => await HandleChatModesGetAsync(stream, ct).ConfigureAwait(false),
+            "/api/chat/modes" when request.Method == "POST" => await HandleChatModesPostAsync(stream, request, ct).ConfigureAwait(false),
+            _ => false
+        };
+    }
 
-        if ((request.Method == "POST" || request.Method == "GET") && request.Path == "/api/chat/send")
-        {
-            try
-            {
-                var content = string.Empty;
-                if (request.Method == "GET")
-                {
-                    request.Query.TryGetValue("content", out content);
-                    if (string.IsNullOrWhiteSpace(content))
-                        request.Query.TryGetValue("message", out content);
-                }
-                else if (request.Body.Length > 0)
-                {
-                    var command = JsonSerializer.Deserialize<SendChatCommand>(request.Body, Plugin.JsonOptions);
-                    content = command?.Content ?? string.Empty;
-                }
+    private async Task<bool> HandleStateRouteAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        if (request.Method != "GET" || request.Path != "/api/state")
+            return false;
 
-                Plugin.Log.Info("HTTP chat send requested from LAN client");
-                var result = await commandDispatcher.SendChatAsync(content ?? string.Empty).ConfigureAwait(false);
-                await WriteJsonAsync(stream, result, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.Error(ex, "HTTP chat send failed");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
-            }
+        await WriteJsonAsync(stream, playerState.GetLatest(), ct).ConfigureAwait(false);
+        return true;
+    }
 
-            return;
-        }
-
-        if (request.Method == "GET" && request.Path == "/api/chat/history")
-        {
-            await WriteJsonAsync(stream, chatMonitor.GetHistory(), cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (request.Method == "GET" && request.Path == "/api/chat/modes")
-        {
-            await WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (request.Method == "POST" && request.Path == "/api/chat/modes")
-        {
-            try
-            {
-                var settings = JsonSerializer.Deserialize<ChatFilterSettings>(request.Body, Plugin.JsonOptions);
-                if (settings == null)
-                {
-                    await WriteResponseAsync(stream, 400, "application/json", JsonBytes(new CommandResult(false, "Invalid chat filter settings.")), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                ChatFilterDefaults.ApplySettings(configuration, settings);
-                saveConfiguration();
-
-                await WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.Error(ex, "Failed to save chat filter modes");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
-            }
-
-            return;
-        }
-
-        if (request.Method == "GET" && request.Path == "/api/state")
-        {
-            await WriteJsonAsync(stream, playerState.GetLatest(), cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
+    private async Task<bool> HandlePluginRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
         if (request.Method == "GET" && request.Path == "/api/plugins")
         {
-            await WriteJsonAsync(stream, Plugin.GetInstalledPlugins(), cancellationToken).ConfigureAwait(false);
-            return;
+            await WriteJsonAsync(stream, Plugin.GetInstalledPlugins(), ct).ConfigureAwait(false);
+            return true;
         }
 
+        if (request.Method == "POST" && TryMatchPluginAction(request.Path, out var name, out var enable))
+        {
+            try
+            {
+                var result = await commandDispatcher.DispatchAsync(
+                    IncomingEnvelope.FromPayload(enable ? "cmd.enablePlugin" : "cmd.disablePlugin",
+                        new TogglePluginCommand(name)), ct).ConfigureAwait(false);
+                await WriteJsonAsync(stream, result, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Plugin toggle failed: {Name}", name);
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<bool> HandleScreenRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
         if (request.Method == "GET" && request.Path.StartsWith("/api/screen/latest.jpg", StringComparison.OrdinalIgnoreCase))
         {
             var latestPath = screenshotModule.LatestPath;
             if (latestPath == null || !File.Exists(latestPath))
             {
-                await WriteResponseAsync(stream, 404, "application/json", JsonBytes(new { ok = false, error = "No screenshot captured yet" }), cancellationToken).ConfigureAwait(false);
-                return;
+                await WriteResponseAsync(stream, 404, "application/json", JsonBytes(new { ok = false, error = "No screenshot captured yet" }), ct).ConfigureAwait(false);
+                return true;
             }
 
-            await WriteResponseAsync(stream, 200, "image/jpeg", await File.ReadAllBytesAsync(latestPath, cancellationToken).ConfigureAwait(false), cancellationToken, new Dictionary<string, string>
+            await WriteResponseAsync(stream, 200, "image/jpeg", await File.ReadAllBytesAsync(latestPath, ct).ConfigureAwait(false), ct, new Dictionary<string, string>
             {
                 ["Cache-Control"] = "no-store"
             }).ConfigureAwait(false);
-            return;
+            return true;
         }
 
         if ((request.Method == "POST" || request.Method == "GET") && request.Path == "/api/screen/capture")
@@ -390,26 +373,31 @@ public sealed class LanWebServer : IDisposable
             try
             {
                 Plugin.Log.Info("HTTP screenshot capture requested from LAN client");
-                var screenshot = await screenshotModule.CaptureAsync(cancellationToken).ConfigureAwait(false);
-                await WriteJsonAsync(stream, new CommandResult(true, "screenshot captured", screenshot), cancellationToken).ConfigureAwait(false);
+                var screenshot = await screenshotModule.CaptureAsync(ct).ConfigureAwait(false);
+                await WriteJsonAsync(stream, new CommandResult(true, "screenshot captured", screenshot), ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "HTTP screenshot capture failed");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
             }
 
-            return;
+            return true;
         }
 
+        return false;
+    }
+
+    private async Task<bool> HandleStreamRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
         if (request.Method == "GET" && request.Path == "/api/stream/config")
         {
             await WriteJsonAsync(stream, new
             {
                 fps = configuration.StreamFps,
                 running = screenshotModule.IsStreaming
-            }, cancellationToken).ConfigureAwait(false);
-            return;
+            }, ct).ConfigureAwait(false);
+            return true;
         }
 
         if (request.Method == "POST" && request.Path == "/api/stream/start")
@@ -425,15 +413,15 @@ public sealed class LanWebServer : IDisposable
                 configuration.StreamFps = fps;
                 saveConfiguration();
 
-                await WriteJsonAsync(stream, new CommandResult(true, "stream started", new { fps }), cancellationToken).ConfigureAwait(false);
+                await WriteJsonAsync(stream, new CommandResult(true, "stream started", new { fps }), ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "HTTP stream start failed");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
             }
 
-            return;
+            return true;
         }
 
         if (request.Method == "POST" && request.Path == "/api/stream/stop")
@@ -441,21 +429,26 @@ public sealed class LanWebServer : IDisposable
             try
             {
                 await screenshotModule.StopStreamingAsync().ConfigureAwait(false);
-                await WriteJsonAsync(stream, new CommandResult(true, "stream stopped"), cancellationToken).ConfigureAwait(false);
+                await WriteJsonAsync(stream, new CommandResult(true, "stream stopped"), ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "HTTP stream stop failed");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
             }
 
-            return;
+            return true;
         }
 
+        return false;
+    }
+
+    private async Task<bool> HandleShortcutRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
         if (request.Method == "GET" && request.Path == "/api/shortcuts")
         {
-            await WriteJsonAsync(stream, configuration.CommandShortcuts, cancellationToken).ConfigureAwait(false);
-            return;
+            await WriteJsonAsync(stream, configuration.CommandShortcuts, ct).ConfigureAwait(false);
+            return true;
         }
 
         if (request.Method == "POST" && request.Path == "/api/shortcuts")
@@ -465,38 +458,122 @@ public sealed class LanWebServer : IDisposable
                 var shortcuts = JsonSerializer.Deserialize<List<CommandShortcut>>(request.Body, Plugin.JsonOptions);
                 if (shortcuts == null)
                 {
-                    await WriteResponseAsync(stream, 400, "application/json", JsonBytes(new CommandResult(false, "Invalid shortcuts.")), cancellationToken).ConfigureAwait(false);
-                    return;
+                    await WriteResponseAsync(stream, 400, "application/json", JsonBytes(new CommandResult(false, "Invalid shortcuts.")), ct).ConfigureAwait(false);
+                    return true;
                 }
 
                 configuration.CommandShortcuts = shortcuts;
                 saveConfiguration();
-                await WriteJsonAsync(stream, new CommandResult(true, "shortcuts saved", shortcuts), cancellationToken).ConfigureAwait(false);
+                await WriteJsonAsync(stream, new CommandResult(true, "shortcuts saved", shortcuts), ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "Failed to save shortcuts");
-                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), cancellationToken).ConfigureAwait(false);
+                await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
             }
 
-            return;
+            return true;
         }
 
-        if (request.Method == "POST" && request.Path == "/api/command")
+        return false;
+    }
+
+    private async Task<bool> HandleDailyRoutinesRoutesAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        if (request.Method == "GET" && request.Path == "/api/dailyroutines")
         {
-            var envelope = JsonSerializer.Deserialize<IncomingEnvelope>(request.Body, Plugin.JsonOptions);
-            if (envelope == null)
-            {
-                await WriteJsonAsync(stream, new CommandResult(false, "Invalid command envelope."), cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            var result = await commandDispatcher.DispatchAsync(envelope, cancellationToken).ConfigureAwait(false);
-            await WriteJsonAsync(stream, result, cancellationToken).ConfigureAwait(false);
-            return;
+            var snapshot = dailyRoutines.CaptureSnapshot();
+            await WriteJsonAsync(stream, snapshot, ct).ConfigureAwait(false);
+            return true;
         }
 
-        await ServeStaticAsync(stream, request, cancellationToken).ConfigureAwait(false);
+        return false;
+    }
+
+    private async Task<bool> HandleCommandRouteAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        if (request.Method != "POST" || request.Path != "/api/command")
+            return false;
+
+        var envelope = JsonSerializer.Deserialize<IncomingEnvelope>(request.Body, Plugin.JsonOptions);
+        if (envelope == null)
+        {
+            await WriteJsonAsync(stream, new CommandResult(false, "Invalid command envelope."), ct).ConfigureAwait(false);
+            return true;
+        }
+
+        var result = await commandDispatcher.DispatchAsync(envelope, ct).ConfigureAwait(false);
+        await WriteJsonAsync(stream, result, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    // ── Chat sub-handlers ───────────────────────────────────────
+
+    private async Task<bool> HandleChatSendAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var content = string.Empty;
+            if (request.Method == "GET")
+            {
+                request.Query.TryGetValue("content", out content);
+                if (string.IsNullOrWhiteSpace(content))
+                    request.Query.TryGetValue("message", out content);
+            }
+            else if (request.Body.Length > 0)
+            {
+                var command = JsonSerializer.Deserialize<SendChatCommand>(request.Body, Plugin.JsonOptions);
+                content = command?.Content ?? string.Empty;
+            }
+
+            Plugin.Log.Info("HTTP chat send requested from LAN client");
+            var result = await commandDispatcher.SendChatAsync(content ?? string.Empty).ConfigureAwait(false);
+            await WriteJsonAsync(stream, result, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "HTTP chat send failed");
+            await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    private async Task<bool> HandleChatHistoryAsync(NetworkStream stream, CancellationToken ct)
+    {
+        await WriteJsonAsync(stream, chatMonitor.GetHistory(), ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> HandleChatModesGetAsync(NetworkStream stream, CancellationToken ct)
+    {
+        await WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> HandleChatModesPostAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var settings = JsonSerializer.Deserialize<ChatFilterSettings>(request.Body, Plugin.JsonOptions);
+            if (settings == null)
+            {
+                await WriteResponseAsync(stream, 400, "application/json", JsonBytes(new CommandResult(false, "Invalid chat filter settings.")), ct).ConfigureAwait(false);
+                return true;
+            }
+
+            ChatFilterDefaults.ApplySettings(configuration, settings);
+            saveConfiguration();
+
+            await WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Failed to save chat filter modes");
+            await WriteResponseAsync(stream, 500, "application/json", JsonBytes(new CommandResult(false, ex.Message)), ct).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     private async Task ServeStaticAsync(NetworkStream stream, HttpRequest request, CancellationToken cancellationToken)
@@ -737,6 +814,32 @@ public sealed class LanWebServer : IDisposable
         var leftBytes = Encoding.UTF8.GetBytes(left);
         var rightBytes = Encoding.UTF8.GetBytes(right);
         return leftBytes.Length == rightBytes.Length && CryptographicOperations.FixedTimeEquals(leftBytes, rightBytes);
+    }
+
+    private static bool TryMatchPluginAction(string path, out string internalName, out bool enable)
+    {
+        internalName = string.Empty;
+        enable = false;
+
+        const string prefix = "/api/plugins/";
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var suffix = path[prefix.Length..];
+        if (suffix.EndsWith("/enable", StringComparison.OrdinalIgnoreCase))
+        {
+            internalName = Uri.UnescapeDataString(suffix[..^"/enable".Length]);
+            enable = true;
+            return internalName.Length > 0;
+        }
+
+        if (suffix.EndsWith("/disable", StringComparison.OrdinalIgnoreCase))
+        {
+            internalName = Uri.UnescapeDataString(suffix[..^"/disable".Length]);
+            return internalName.Length > 0;
+        }
+
+        return false;
     }
 
     private sealed record HttpRequest(

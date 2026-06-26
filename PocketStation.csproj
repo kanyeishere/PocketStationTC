@@ -6,10 +6,12 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <DefaultItemExcludes>$(DefaultItemExcludes);frontend\node_modules\**;frontend\dist\**;OmenTools\**;OmenTools\**\*</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);frontend\node_modules\**;frontend\dist\**;OmenTools\**;OmenTools\**\*;lib\**</DefaultItemExcludes>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <RootNamespace>PocketStation</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -51,5 +53,17 @@
     <None Update="PocketStation.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Copy OmenTools transitive dependencies (not covered by CopyLocalLockFileAssemblies=false) -->
+  <Target Name="CopyOmenToolsDeps" AfterTargets="Build">
+    <PropertyGroup>
+      <_OmenOutDir>$(MSBuildProjectDirectory)\OmenTools\bin\Debug\</_OmenOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_OmenToolsDep Include="$(_OmenOutDir)GuerrillaNtp.dll" Condition="Exists('$(_OmenOutDir)GuerrillaNtp.dll')" />
+      <_OmenToolsDep Include="$(_OmenOutDir)TinyPinyin.dll" Condition="Exists('$(_OmenOutDir)TinyPinyin.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OmenToolsDep)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

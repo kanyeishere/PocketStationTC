@@ -44,6 +44,7 @@ export interface CharacterState {
   objectId: number;
   entityId: number;
   classJobId: number;
+  classJobName: string;
   level: number;
   currentHp: number;
   maxHp: number;
@@ -58,10 +59,21 @@ export interface PlayerSnapshot {
   isLoggedIn: boolean;
   territoryType: number;
   mapId: number;
+  territoryName: string;
+  worldName: string;
+  dataCenterName: string;
   localPlayer?: CharacterState | null;
   target?: CharacterState | null;
   party: CharacterState[];
   timestamp: number;
+  currencies?: CurrencyInfo[] | null;
+}
+
+export interface CurrencyInfo {
+  itemId: number;
+  name: string;
+  count: number;
+  iconId: string;
 }
 
 export interface ScreenshotReadyEvent {
@@ -111,4 +123,14 @@ export interface PluginInfo {
   name: string;
   version: string;
   isLoaded: boolean;
+}
+
+export interface DailyRoutinesModule {
+  name: string;
+  enabled: boolean;
+  displayName: string;
+}
+
+export interface DailyRoutinesSnapshot {
+  modules: DailyRoutinesModule[];
 }
