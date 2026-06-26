@@ -18,28 +18,100 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 const screenFrame = ref<HTMLDivElement | null>(null);
 const fpsInput = ref(props.fps);
 const isFullscreen = ref(false);
+const isFallbackFullscreen = ref(false);
 let animating = false;
 
+type WebKitFullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type WebKitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+function getFullscreenElement() {
+  const doc = document as WebKitFullscreenDocument;
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
 function onFullscreenChange() {
-  isFullscreen.value = !!document.fullscreenElement;
+  isFullscreen.value = isFallbackFullscreen.value || getFullscreenElement() === screenFrame.value;
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && isFallbackFullscreen.value) {
+    void exitFullscreenMode();
+  }
 }
 
 onMounted(() => {
   document.addEventListener("fullscreenchange", onFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+  document.addEventListener("keydown", onKeydown);
 });
 
 onUnmounted(() => {
   document.removeEventListener("fullscreenchange", onFullscreenChange);
+  document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+  document.removeEventListener("keydown", onKeydown);
 });
+
+async function requestNativeFullscreen(el: HTMLElement) {
+  const fullscreenEl = el as WebKitFullscreenElement;
+  const requestFullscreen = fullscreenEl.requestFullscreen ?? fullscreenEl.webkitRequestFullscreen;
+  if (!requestFullscreen) return false;
+
+  try {
+    await requestFullscreen.call(fullscreenEl);
+    isFallbackFullscreen.value = false;
+    isFullscreen.value = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function exitNativeFullscreen() {
+  if (!getFullscreenElement()) return;
+
+  const doc = document as WebKitFullscreenDocument;
+  const exitFullscreen = document.exitFullscreen ?? doc.webkitExitFullscreen;
+  if (!exitFullscreen) return;
+
+  try {
+    await exitFullscreen.call(document);
+  } catch {
+    // Browser may reject when fullscreen has already been dismissed.
+  }
+}
+
+async function enterFullscreenMode() {
+  const el = screenFrame.value;
+  if (!el) return;
+
+  const enteredNativeFullscreen = await requestNativeFullscreen(el);
+  if (enteredNativeFullscreen) return;
+
+  isFallbackFullscreen.value = true;
+  onFullscreenChange();
+}
+
+async function exitFullscreenMode() {
+  if (getFullscreenElement()) {
+    await exitNativeFullscreen();
+  }
+
+  isFallbackFullscreen.value = false;
+  onFullscreenChange();
+}
 
 async function toggleFullscreen() {
   if (!props.running) return;
   if (isFullscreen.value) {
-    await document.exitFullscreen();
+    await exitFullscreenMode();
   } else {
-    const el = screenFrame.value;
-    if (!el) return;
-    await el.requestFullscreen();
+    await enterFullscreenMode();
   }
 }
 
@@ -108,6 +180,16 @@ watch(() => props.isActive, (active, _prev) => {
     // Auto-stop stream when leaving the tab
     emit("stop");
   }
+
+  if (!active && isFullscreen.value) {
+    void exitFullscreenMode();
+  }
+});
+
+watch(() => props.running, (running) => {
+  if (!running && isFullscreen.value) {
+    void exitFullscreenMode();
+  }
 });
 </script>
 
@@ -134,7 +216,11 @@ watch(() => props.isActive, (active, _prev) => {
     <div
       ref="screenFrame"
       class="screen-frame"
-      :class="{ 'is-fullscreen': isFullscreen, 'can-fullscreen': running }"
+      :class="{
+        'is-fullscreen': isFullscreen,
+        'is-fallback-fullscreen': isFallbackFullscreen,
+        'can-fullscreen': running
+      }"
       @click="toggleFullscreen"
     >
       <canvas
@@ -173,6 +259,7 @@ watch(() => props.isActive, (active, _prev) => {
   align-items: center;
   justify-content: center;
   background: #000;
+  touch-action: manipulation;
 }
 
 .screen-frame.is-fullscreen .live-canvas {
@@ -181,6 +268,30 @@ watch(() => props.isActive, (active, _prev) => {
   max-width: 100vw;
   max-height: 100vh;
   object-fit: contain;
+}
+
+.screen-frame.is-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  overscroll-behavior: none;
+}
+
+.screen-frame.is-fallback-fullscreen .live-canvas {
+  max-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 
 .live-placeholder {
@@ -229,5 +340,3 @@ watch(() => props.isActive, (active, _prev) => {
   text-align: center;
 }
 </style>
-
-
