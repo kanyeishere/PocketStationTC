@@ -26,6 +26,7 @@ const filteredPlugins = computed(() => {
 });
 
 async function doToggle(internalName: string, name: string, enable: boolean) {
+  confirming.value = null;
   toggling.value = internalName;
   try {
     const result = await props.togglePlugin(internalName, enable);
@@ -37,7 +38,6 @@ async function doToggle(internalName: string, name: string, enable: boolean) {
     alert(String(e));
   } finally {
     toggling.value = "";
-    confirming.value = null;
   }
 }
 </script>
@@ -79,13 +79,19 @@ async function doToggle(internalName: string, name: string, enable: boolean) {
               class="btn-toggle btn-disable"
               :disabled="toggling === plugin.internalName"
               @click="confirming = { internalName: plugin.internalName, name: plugin.name, enable: false }"
-            >禁用</button>
+            >
+              <span v-if="toggling === plugin.internalName" class="spinner"></span>
+              {{ toggling === plugin.internalName ? '禁用中...' : '禁用' }}
+            </button>
             <button
               v-else
               class="btn-toggle btn-enable"
               :disabled="toggling === plugin.internalName"
               @click="confirming = { internalName: plugin.internalName, name: plugin.name, enable: true }"
-            >启用</button>
+            >
+              <span v-if="toggling === plugin.internalName" class="spinner"></span>
+              {{ toggling === plugin.internalName ? '启用中...' : '启用' }}
+            </button>
           </div>
         </div>
         <div v-if="filteredPlugins.length === 0" class="empty">

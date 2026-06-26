@@ -8,6 +8,7 @@ using OmenTools;
 using OmenTools.Dalamud.Helpers;
 using PocketStation.Core;
 using PocketStation.Game;
+using PocketStation.Helpers;
 using PocketStation.Modules;
 using PocketStation.Web;
 
@@ -64,7 +65,7 @@ public sealed class Plugin : IDalamudPlugin
         chatMonitor = new ChatMonitorModule(configuration, eventBus, game);
         playerState = new PlayerStateModule(configuration, eventBus, game, Framework);
         commandDispatcher = new CommandDispatcher(configuration, eventBus, game, screenshotModule);
-        commandDispatcher.OnTogglePlugin = PluginStateManager.SetPluginStateAsync;
+        commandDispatcher.OnTogglePlugin = DalamudReflectorEx.SetPluginStateAsync;
 
         moduleHost = new PocketModuleHost();
         moduleHost.Add(chatMonitor);
