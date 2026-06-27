@@ -8,6 +8,7 @@ namespace PocketStation.Infrastructure.Network;
 public sealed class LanWebServer : IDisposable
 {
     private const int MaxHeaderBytes = 64 * 1024;
+    private const int MaxBodyBytes = 8 * 1024 * 1024;
 
     private readonly PocketStation.Host.Configuration configuration;
     private readonly EventBus eventBus;
@@ -247,6 +248,9 @@ public sealed class LanWebServer : IDisposable
 
         headers.TryGetValue("content-length", out var cl);
         var contentLength = int.TryParse(cl, out var parsed) ? parsed : 0;
+        if (contentLength > MaxBodyBytes)
+            throw new InvalidOperationException("HTTP request body is too large.");
+
         var body = new byte[contentLength];
         var bodyStart = headerEnd + 4;
         var prefixLength = Math.Min(contentLength, raw.Length - bodyStart);

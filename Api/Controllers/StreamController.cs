@@ -3,6 +3,7 @@ using System.Text.Json;
 using PocketStation.Domain;
 using PocketStation.Host;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Serialization;
 using PocketStation.Services;
 
 namespace PocketStation.Api.Controllers;
@@ -43,7 +44,7 @@ public sealed class StreamController : IHttpController
             try
             {
                 var command = request.Body.Length > 0
-                    ? JsonSerializer.Deserialize<StartStreamCommand>(request.Body, Plugin.JsonOptions)
+                    ? JsonSerializer.Deserialize<StartStreamCommand>(request.Body, PocketJson.Options)
                     : new StartStreamCommand();
 
                 var fps = Math.Clamp(command?.Fps ?? configuration.StreamFps, 1, 120);

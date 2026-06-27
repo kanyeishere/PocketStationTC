@@ -73,6 +73,9 @@ public sealed class WebSocketConnection : IDisposable
         var masked = (header[1] & 0x80) != 0;
         ulong length = (ulong)(header[1] & 0x7F);
 
+        if (!masked)
+            throw new InvalidOperationException("Client WebSocket frames must be masked.");
+
         if (length == 126)
         {
             var ext = await ReadExactAsync(2, cancellationToken).ConfigureAwait(false);

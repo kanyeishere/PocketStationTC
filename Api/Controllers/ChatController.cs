@@ -4,6 +4,7 @@ using PocketStation.Api;
 using PocketStation.Domain;
 using PocketStation.Host;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Serialization;
 using PocketStation.Services;
 
 namespace PocketStation.Api.Controllers;
@@ -13,17 +14,20 @@ public sealed class ChatController : IHttpController
     private readonly Configuration configuration;
     private readonly CommandDispatcher commandDispatcher;
     private readonly ChatMonitorModule chatMonitor;
+    private readonly ChatTypeCatalogService chatTypeCatalog;
     private readonly Action saveConfiguration;
 
     public ChatController(
         Configuration configuration,
         CommandDispatcher commandDispatcher,
         ChatMonitorModule chatMonitor,
+        ChatTypeCatalogService chatTypeCatalog,
         Action saveConfiguration)
     {
         this.configuration = configuration;
         this.commandDispatcher = commandDispatcher;
         this.chatMonitor = chatMonitor;
+        this.chatTypeCatalog = chatTypeCatalog;
         this.saveConfiguration = saveConfiguration;
     }
 
@@ -52,7 +56,7 @@ public sealed class ChatController : IHttpController
             }
             else if (request.Body.Length > 0)
             {
-                var command = JsonSerializer.Deserialize<SendChatCommand>(request.Body, Plugin.JsonOptions);
+                var command = JsonSerializer.Deserialize<SendChatCommand>(request.Body, PocketJson.Options);
                 content = command?.Content ?? string.Empty;
             }
 
@@ -78,7 +82,7 @@ public sealed class ChatController : IHttpController
 
     private async Task<bool> HandleModesGetAsync(NetworkStream stream, CancellationToken ct)
     {
-        await HttpHelpers.WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), ct).ConfigureAwait(false);
+        await HttpHelpers.WriteJsonAsync(stream, CreateSettings(), ct).ConfigureAwait(false);
         return true;
     }
 
@@ -86,7 +90,7 @@ public sealed class ChatController : IHttpController
     {
         try
         {
-            var settings = JsonSerializer.Deserialize<ChatFilterSettings>(request.Body, Plugin.JsonOptions);
+            var settings = JsonSerializer.Deserialize<ChatFilterSettings>(request.Body, PocketJson.Options);
             if (settings == null)
             {
                 await HttpHelpers.WriteResponseAsync(stream, 400, "application/json",
@@ -97,7 +101,7 @@ public sealed class ChatController : IHttpController
             ChatFilterDefaults.ApplySettings(configuration, settings);
             saveConfiguration();
 
-            await HttpHelpers.WriteJsonAsync(stream, ChatFilterDefaults.CreateSettings(configuration), ct).ConfigureAwait(false);
+            await HttpHelpers.WriteJsonAsync(stream, CreateSettings(), ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -108,4 +112,7 @@ public sealed class ChatController : IHttpController
 
         return true;
     }
+
+    private ChatFilterSettings CreateSettings() =>
+        ChatFilterDefaults.CreateSettings(configuration, chatTypeCatalog.GetOptions());
 }

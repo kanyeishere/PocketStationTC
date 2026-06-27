@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using PocketStation.Infrastructure.Serialization;
 
 namespace PocketStation.Infrastructure.Network;
 
@@ -24,7 +25,7 @@ public static class HttpHelpers
     public static async Task WriteJsonAsync(NetworkStream stream, object value, CancellationToken ct)
     {
         await WriteResponseAsync(stream, 200, "application/json; charset=utf-8",
-            JsonSerializer.SerializeToUtf8Bytes(value, Plugin.JsonOptions), ct).ConfigureAwait(false);
+            JsonSerializer.SerializeToUtf8Bytes(value, PocketJson.Options), ct).ConfigureAwait(false);
     }
 
     public static async Task WriteResponseAsync(
@@ -67,7 +68,7 @@ public static class HttpHelpers
     }
 
     public static byte[] JsonBytes(object value) =>
-        JsonSerializer.SerializeToUtf8Bytes(value, Plugin.JsonOptions);
+        JsonSerializer.SerializeToUtf8Bytes(value, PocketJson.Options);
 
     public static bool IsAuthorized(HttpRequest request, string? requireToken, string? expectedToken)
     {

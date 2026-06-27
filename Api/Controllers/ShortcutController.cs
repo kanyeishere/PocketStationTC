@@ -3,6 +3,7 @@ using System.Text.Json;
 using PocketStation.Domain;
 using PocketStation.Host;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Serialization;
 
 namespace PocketStation.Api.Controllers;
 
@@ -29,7 +30,7 @@ public sealed class ShortcutController : IHttpController
         {
             try
             {
-                var shortcuts = JsonSerializer.Deserialize<List<CommandShortcut>>(request.Body, Plugin.JsonOptions);
+                var shortcuts = JsonSerializer.Deserialize<List<CommandShortcut>>(request.Body, PocketJson.Options);
                 if (shortcuts == null)
                 {
                     await HttpHelpers.WriteResponseAsync(stream, 400, "application/json",

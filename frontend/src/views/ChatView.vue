@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import ChatFilterEditor from "@/components/ChatFilterEditor.vue";
-import type { ChatEvent, ChatFilterMode } from "@/types";
+import type { ChatEvent, ChatFilterMode, ChatTypeOption } from "@/types";
 
 const props = defineProps<{
-  allChatTypes: string[];
+  allChatTypes: ChatTypeOption[];
   chats: ChatEvent[];
   currentMode: ChatFilterMode;
   currentModeId: string;

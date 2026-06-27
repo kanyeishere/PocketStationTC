@@ -7,6 +7,7 @@ using PocketStation.Domain;
 using PocketStation.Host;
 using PocketStation.Infrastructure.Messaging;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Serialization;
 using PocketStation.Services;
 
 namespace PocketStation.Api;
@@ -116,7 +117,7 @@ public sealed class WebSocketHandler
         IncomingEnvelope? envelope;
         try
         {
-            envelope = JsonSerializer.Deserialize<IncomingEnvelope>(message, Plugin.JsonOptions);
+            envelope = JsonSerializer.Deserialize<IncomingEnvelope>(message, PocketJson.Options);
         }
         catch (JsonException ex)
         {

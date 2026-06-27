@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import type { ChatFilterMode } from "@/types";
+import type { ChatFilterMode, ChatTypeOption } from "@/types";
 
 const props = defineProps<{
-  allTypes: string[];
+  allTypes: ChatTypeOption[];
   currentMode: ChatFilterMode;
   shownCount: number;
   totalCount: number;
@@ -18,6 +18,7 @@ const modeName = ref("");
 const includeText = ref("");
 const excludeText = ref("");
 const selectedTypes = ref<string[]>([]);
+const typesExpanded = ref(false);
 
 watch(
   () => props.currentMode,
@@ -57,6 +58,10 @@ function isSelected(type: string) {
   return selectedTypes.value.some((item) => equalsText(item, type));
 }
 
+function displayType(type: ChatTypeOption) {
+  return type.displayName || type.id;
+}
+
 function parseList(value: string) {
   return value
     .split(/[\n,，]+/)
@@ -73,21 +78,31 @@ function equalsText(left: string, right: string) {
   <div class="filter-editor">
     <input v-model="modeName" autocomplete="off" placeholder="模式名称">
 
-    <details class="type-details">
-      <summary>消息类型</summary>
-      <div class="type-palette">
+    <div class="type-details">
+      <button
+        type="button"
+        class="section-title collapsible-header type-toggle-header"
+        :aria-expanded="typesExpanded"
+        @click="typesExpanded = !typesExpanded"
+      >
+        <span class="collapse-arrow">{{ typesExpanded ? "▼" : "▶" }}</span>
+        <span>消息类型</span>
+        <span class="type-count">已选 {{ selectedTypes.length }}/{{ allTypes.length }}</span>
+      </button>
+      <div v-if="typesExpanded" class="type-palette">
         <button
           v-for="type in allTypes"
-          :key="type"
+          :key="type.id"
           class="type-chip"
-          :class="{ active: isSelected(type) }"
+          :class="{ active: isSelected(type.id) }"
           type="button"
-          @click="toggleType(type)"
+          :title="type.id"
+          @click="toggleType(type.id)"
         >
-          {{ type }}
+          {{ displayType(type) }}
         </button>
       </div>
-    </details>
+    </div>
 
     <div class="keyword-grid">
       <textarea v-model="includeText" rows="2" placeholder="包含关键词" />

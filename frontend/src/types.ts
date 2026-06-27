@@ -99,6 +99,13 @@ export interface ChatFilterSettings {
   currentModeId: string;
   modes: ChatFilterMode[];
   allTypes: string[];
+  allTypeOptions?: ChatTypeOption[];
+}
+
+export interface ChatTypeOption {
+  id: string;
+  displayName: string;
+  rowId: number;
 }
 
 export interface HealthInfo {

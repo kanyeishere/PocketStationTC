@@ -17,7 +17,13 @@ public sealed class ChatFilterSettings
     public string CurrentModeId { get; set; } = ChatFilterDefaults.AllId;
     public List<ChatFilterMode> Modes { get; set; } = [];
     public IReadOnlyList<string> AllTypes { get; set; } = ChatFilterDefaults.AllTypes;
+    public IReadOnlyList<ChatTypeOption> AllTypeOptions { get; set; } = ChatFilterDefaults.DefaultTypeOptions;
 }
+
+public sealed record ChatTypeOption(
+    string Id,
+    string DisplayName,
+    ushort RowId);
 
 public static class ChatFilterDefaults
 {
@@ -109,6 +115,9 @@ public static class ChatFilterDefaults
         "CrossLinkShell8",
     ];
 
+    public static IReadOnlyList<ChatTypeOption> DefaultTypeOptions { get; } =
+        AllTypes.Select(id => new ChatTypeOption(id, id, 0)).ToList();
+
     public static List<ChatFilterMode> CreateBuiltInModes() =>
     [
         BuiltIn(AllId, "全部消息"),
@@ -144,14 +153,18 @@ public static class ChatFilterDefaults
             "GmLinkshell5", "GmLinkshell6", "GmLinkshell7", "GmLinkshell8", "GmNoviceNetwork"),
     ];
 
-    public static ChatFilterSettings CreateSettings(Configuration configuration)
+    public static ChatFilterSettings CreateSettings(
+        Configuration configuration,
+        IReadOnlyList<ChatTypeOption>? typeOptions = null)
     {
         EnsureDefaults(configuration);
+        var options = typeOptions is { Count: > 0 } ? typeOptions : DefaultTypeOptions;
         return new ChatFilterSettings
         {
             CurrentModeId = configuration.SelectedChatModeId,
             Modes = configuration.ChatFilterModes.Select(Clone).ToList(),
-            AllTypes = AllTypes
+            AllTypes = AllTypes,
+            AllTypeOptions = options
         };
     }
 

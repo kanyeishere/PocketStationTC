@@ -38,9 +38,4 @@ public sealed record IncomingEnvelope
     [JsonPropertyName("payload")]
     public JsonElement Payload { get; init; }
 
-    public static IncomingEnvelope FromPayload(string type, object payload)
-    {
-        var doc = JsonSerializer.SerializeToDocument(payload, Plugin.JsonOptions);
-        return new IncomingEnvelope { Type = type, Payload = doc.RootElement };
-    }
 }

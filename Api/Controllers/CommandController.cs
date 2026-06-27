@@ -3,6 +3,7 @@ using System.Text.Json;
 using PocketStation.Api;
 using PocketStation.Domain;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Serialization;
 using PocketStation.Services;
 
 namespace PocketStation.Api.Controllers;
@@ -21,7 +22,7 @@ public sealed class CommandController : IHttpController
         if (request.Method != "POST" || request.Path != "/api/command")
             return false;
 
-        var envelope = JsonSerializer.Deserialize<IncomingEnvelope>(request.Body, Plugin.JsonOptions);
+        var envelope = JsonSerializer.Deserialize<IncomingEnvelope>(request.Body, PocketJson.Options);
         if (envelope == null)
         {
             await HttpHelpers.WriteJsonAsync(stream,

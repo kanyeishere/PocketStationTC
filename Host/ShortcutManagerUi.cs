@@ -194,17 +194,23 @@ public static class ShortcutManagerUi
         }
 
         _state.Error = null;
+        var editing = _state.Editing;
+        if (editing == null)
+        {
+            _state.Error = "没有正在编辑的快捷指令。";
+            return;
+        }
 
         if (_state.IsNew)
         {
-            shortcuts.Add(new CommandShortcut(_state.Editing!.Id, label, command));
+            shortcuts.Add(new CommandShortcut(editing.Id, label, command));
         }
         else
         {
             // Replace the existing shortcut
-            var index = shortcuts.FindIndex(s => s.Id == _state.Editing!.Id);
+            var index = shortcuts.FindIndex(s => s.Id == editing.Id);
             if (index >= 0)
-                shortcuts[index] = new CommandShortcut(_state.Editing.Id, label, command);
+                shortcuts[index] = new CommandShortcut(editing.Id, label, command);
         }
 
         CancelEdit();

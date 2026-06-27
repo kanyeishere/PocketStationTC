@@ -9,17 +9,21 @@ namespace PocketStation.Api.Controllers;
 public sealed class PluginController : IHttpController
 {
     private readonly CommandDispatcher commandDispatcher;
+    private readonly DalamudPluginService pluginService;
 
-    public PluginController(CommandDispatcher commandDispatcher)
+    public PluginController(
+        CommandDispatcher commandDispatcher,
+        DalamudPluginService pluginService)
     {
         this.commandDispatcher = commandDispatcher;
+        this.pluginService = pluginService;
     }
 
     public async Task<bool> TryHandleAsync(NetworkStream stream, HttpRequest request, CancellationToken ct)
     {
         if (request.Method == "GET" && request.Path == "/api/plugins")
         {
-            await HttpHelpers.WriteJsonAsync(stream, Plugin.GetInstalledPlugins(), ct).ConfigureAwait(false);
+            await HttpHelpers.WriteJsonAsync(stream, pluginService.GetInstalledPlugins(), ct).ConfigureAwait(false);
             return true;
         }
 
@@ -28,7 +32,7 @@ public sealed class PluginController : IHttpController
             try
             {
                 var result = await commandDispatcher.DispatchAsync(
-                    IncomingEnvelope.FromPayload(enable ? "cmd.enablePlugin" : "cmd.disablePlugin",
+                    IncomingEnvelopeFactory.FromPayload(enable ? "cmd.enablePlugin" : "cmd.disablePlugin",
                         new TogglePluginCommand(name)), ct).ConfigureAwait(false);
                 await HttpHelpers.WriteJsonAsync(stream, result, ct).ConfigureAwait(false);
             }

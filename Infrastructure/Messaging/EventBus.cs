@@ -1,17 +1,13 @@
 using System.Text.Json;
 using PocketStation;
 using PocketStation.Domain;
+using PocketStation.Infrastructure.Serialization;
 
 namespace PocketStation.Infrastructure.Messaging;
 
 public sealed class EventBus
 {
     public event Func<Envelope, Task>? Published;
-
-    public JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = false
-    };
 
     public void Publish(string type, object? payload = null)
     {
@@ -24,7 +20,7 @@ public sealed class EventBus
             _ = SafeInvokeAsync(handler, envelope);
     }
 
-    public string Serialize(Envelope envelope) => JsonSerializer.Serialize(envelope, JsonOptions);
+    public string Serialize(Envelope envelope) => JsonSerializer.Serialize(envelope, PocketJson.Options);
 
     private static async Task SafeInvokeAsync(Func<Envelope, Task> handler, Envelope envelope)
     {

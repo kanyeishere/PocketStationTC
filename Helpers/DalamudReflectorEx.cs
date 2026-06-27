@@ -31,8 +31,8 @@ public static class DalamudReflectorEx
             var pm = DalamudReflector.GetPluginManager();
             if (pm == null) return "PluginManager not available.";
 
-            var installedPlugins = (IList)pm.GetType()
-                .GetProperty("InstalledPlugins")?.GetValue(pm);
+            var installedPlugins = pm.GetType()
+                .GetProperty("InstalledPlugins")?.GetValue(pm) as IList;
             if (installedPlugins == null) return "InstalledPlugins not available.";
 
             foreach (var plugin in installedPlugins)
@@ -57,8 +57,10 @@ public static class DalamudReflectorEx
                     if (_cachedLoadAsync == null)
                         return "LoadAsync not found on LocalPlugin.";
                     // LoadAsync(PluginLoadReason, bool reloading, CancellationToken)
-                    var task = (Task)_cachedLoadAsync.Invoke(plugin,
-                        [PluginLoadReason.Installer, false, CancellationToken.None]);
+                    if (_cachedLoadAsync.Invoke(plugin,
+                        [PluginLoadReason.Installer, false, CancellationToken.None]) is not Task task)
+                        return "LoadAsync did not return a task.";
+
                     await task.ConfigureAwait(false);
                 }
                 else
@@ -70,7 +72,9 @@ public static class DalamudReflectorEx
                     var args = hasParam && _cachedDisposalMode != null
                         ? new[] { _cachedDisposalMode }
                         : null;
-                    var task = (Task)_cachedUnloadAsync.Invoke(plugin, args);
+                    if (_cachedUnloadAsync.Invoke(plugin, args) is not Task task)
+                        return "UnloadAsync did not return a task.";
+
                     await task.ConfigureAwait(false);
                 }
 

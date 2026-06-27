@@ -2,6 +2,7 @@ using System.Text.Json;
 using PocketStation.Host;
 using PocketStation.Infrastructure.Game;
 using PocketStation.Infrastructure.Messaging;
+using PocketStation.Infrastructure.Serialization;
 using PocketStation.Services;
 using PocketStation.Domain;
 
@@ -47,7 +48,7 @@ public sealed class CommandDispatcher
 
     private async Task<CommandResult> DispatchSendChatAsync(JsonElement payload)
     {
-        var command = payload.Deserialize<SendChatCommand>(Plugin.JsonOptions);
+        var command = payload.Deserialize<SendChatCommand>(PocketJson.Options);
         return await SendChatAsync(command?.Content ?? string.Empty).ConfigureAwait(false);
     }
 
@@ -70,7 +71,7 @@ public sealed class CommandDispatcher
         try
         {
             var command = payload.ValueKind == JsonValueKind.Object
-                ? payload.Deserialize<RequestScreenshotCommand>(Plugin.JsonOptions)
+                ? payload.Deserialize<RequestScreenshotCommand>(PocketJson.Options)
                 : new RequestScreenshotCommand();
 
             var screenshot = await screenshotModule.CaptureAsync(cancellationToken).ConfigureAwait(false);
@@ -101,7 +102,7 @@ public sealed class CommandDispatcher
         try
         {
             var command = payload.ValueKind == JsonValueKind.Object
-                ? payload.Deserialize<StartStreamCommand>(Plugin.JsonOptions)
+                ? payload.Deserialize<StartStreamCommand>(PocketJson.Options)
                 : new StartStreamCommand();
 
             var fps = command?.Fps ?? configuration.StreamFps;
@@ -141,7 +142,7 @@ public sealed class CommandDispatcher
 
     private async Task<CommandResult> DispatchTogglePluginAsync(JsonElement payload, bool enable)
     {
-        var command = payload.Deserialize<TogglePluginCommand>(Plugin.JsonOptions);
+        var command = payload.Deserialize<TogglePluginCommand>(PocketJson.Options);
         var internalName = command?.InternalName?.Trim();
         if (string.IsNullOrWhiteSpace(internalName))
             return new CommandResult(false, "需要提供插件内部名称。");
