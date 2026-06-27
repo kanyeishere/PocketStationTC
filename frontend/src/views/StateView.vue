@@ -11,7 +11,7 @@ defineProps<{
   togglePlugin: (internalName: string, enable: boolean) => Promise<CommandResult>;
   dailyRoutinesModules: DailyRoutinesModule[];
   dailyRoutinesLoading: boolean;
-  toggleDailyRoutine: (name: string, enable: boolean) => void;
+  toggleDailyRoutine: (name: string, enable: boolean) => Promise<boolean>;
 }>();
 
 defineEmits<{

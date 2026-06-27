@@ -175,9 +175,7 @@ export function usePocketStation() {
       return;
     }
 
-    if (result.message === "sent") {
-      setConnection("已发送", "online");
-    }
+    setConnection(result.message || "已发送", "online");
   }
 
   function renderScreenshot(payload: ScreenshotReadyEvent) {
@@ -275,12 +273,17 @@ export function usePocketStation() {
 
   async function toggleDailyRoutine(name: string, enable: boolean) {
     const command = enable ? `/pdr load ${name}` : `/pdr unload ${name}`;
-    await sendChat(command, "");
-    // Optimistically update the local state
+    const sent = await sendChat(command, "");
+    if (!sent) {
+      return false;
+    }
+
     const mod = dailyRoutinesModules.value.find((m) => m.name === name);
     if (mod) {
       mod.enabled = enable;
     }
+
+    return true;
   }
 
   async function sendChat(content: string, channel: string): Promise<boolean> {
