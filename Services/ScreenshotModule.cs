@@ -158,11 +158,7 @@ public sealed class ScreenshotModule : IGameModule
         {
             return await Task.Run(() =>
             {
-                var (origin, width, height) = GetCaptureRegion();
-                using var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
-                using var graphics = Graphics.FromImage(bitmap);
-                graphics.CopyFromScreen(origin.X, origin.Y, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
-
+                using var bitmap = CaptureGameWindow();
                 using var ms = new System.IO.MemoryStream();
                 SaveJpeg(bitmap, ms, configuration.ScreenshotJpegQuality);
                 return ms.ToArray();
@@ -176,17 +172,13 @@ public sealed class ScreenshotModule : IGameModule
 
     private ScreenshotReadyEvent CaptureToFile()
     {
-        var (origin, width, height) = GetCaptureRegion();
-
         var tempPath = Path.Combine(cacheDirectory, "latest.tmp.jpg");
         var finalPath = Path.Combine(cacheDirectory, "latest.jpg");
 
-        using (var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb))
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.CopyFromScreen(origin.X, origin.Y, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
-            SaveJpeg(bitmap, tempPath, configuration.ScreenshotJpegQuality);
-        }
+        using var bitmap = CaptureGameWindow();
+        var width = bitmap.Width;
+        var height = bitmap.Height;
+        SaveJpeg(bitmap, tempPath, configuration.ScreenshotJpegQuality);
 
         if (File.Exists(finalPath))
             File.Delete(finalPath);
@@ -209,7 +201,109 @@ public sealed class ScreenshotModule : IGameModule
         return evt;
     }
 
-    private static (NativePoint Origin, int Width, int Height) GetCaptureRegion()
+    private static Bitmap CaptureGameWindow()
+    {
+        var region = GetCaptureRegion();
+        var bitmap = new Bitmap(region.Width, region.Height, PixelFormat.Format24bppRgb);
+
+        try
+        {
+            if (TryCaptureWindowClient(region.Hwnd, bitmap))
+                return bitmap;
+
+            if (TryCaptureWindowDeviceContext(region, bitmap))
+                return bitmap;
+
+            throw new InvalidOperationException("Failed to capture game window content.");
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
+        }
+    }
+
+    private static bool TryCaptureWindowClient(IntPtr hwnd, Bitmap bitmap)
+    {
+        using var graphics = Graphics.FromImage(bitmap);
+        var hdc = graphics.GetHdc();
+
+        try
+        {
+            var flags = PrintWindowFlags.ClientOnly | PrintWindowFlags.RenderFullContent;
+            if (!PrintWindow(hwnd, hdc, flags))
+            {
+                Plugin.Log.Debug("PrintWindow failed; falling back to game window DC capture. LastError={LastError}",
+                    Marshal.GetLastWin32Error());
+                return false;
+            }
+        }
+        finally
+        {
+            graphics.ReleaseHdc(hdc);
+        }
+
+        if (!IsLikelyBlank(bitmap))
+            return true;
+
+        Plugin.Log.Debug("PrintWindow returned a blank frame; falling back to game window DC capture.");
+        return false;
+    }
+
+    private static bool TryCaptureWindowDeviceContext(CaptureRegion region, Bitmap bitmap)
+    {
+        var sourceDc = GetDC(region.Hwnd);
+        if (sourceDc == IntPtr.Zero)
+        {
+            Plugin.Log.Debug("GetDC failed while capturing game window. LastError={LastError}",
+                Marshal.GetLastWin32Error());
+            return false;
+        }
+
+        using var graphics = Graphics.FromImage(bitmap);
+        var targetDc = graphics.GetHdc();
+
+        try
+        {
+            if (BitBlt(targetDc, 0, 0, region.Width, region.Height, sourceDc, 0, 0, RasterOperation.SourceCopy))
+                return true;
+
+            Plugin.Log.Debug("BitBlt failed while capturing game window. LastError={LastError}",
+                Marshal.GetLastWin32Error());
+            return false;
+        }
+        finally
+        {
+            graphics.ReleaseHdc(targetDc);
+            ReleaseDC(region.Hwnd, sourceDc);
+        }
+    }
+
+    private static bool IsLikelyBlank(Bitmap bitmap)
+    {
+        const int tolerance = 2;
+        var first = bitmap.GetPixel(0, 0);
+        var stepX = Math.Max(1, bitmap.Width / 8);
+        var stepY = Math.Max(1, bitmap.Height / 8);
+
+        for (var y = 0; y < bitmap.Height; y += stepY)
+        {
+            for (var x = 0; x < bitmap.Width; x += stepX)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (Math.Abs(pixel.R - first.R) > tolerance ||
+                    Math.Abs(pixel.G - first.G) > tolerance ||
+                    Math.Abs(pixel.B - first.B) > tolerance)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static CaptureRegion GetCaptureRegion()
     {
         var hwnd = Plugin.PluginInterface.UiBuilder.WindowHandlePtr;
         if (hwnd == IntPtr.Zero)
@@ -220,12 +314,7 @@ public sealed class ScreenshotModule : IGameModule
 
         var width = Math.Max(1, rect.Right - rect.Left);
         var height = Math.Max(1, rect.Bottom - rect.Top);
-        var origin = new NativePoint { X = 0, Y = 0 };
-
-        if (!ClientToScreen(hwnd, ref origin))
-            throw new InvalidOperationException("Failed to map game client rectangle to screen.");
-
-        return (origin, width, height);
+        return new CaptureRegion(hwnd, width, height);
     }
 
     private static void SaveJpeg(Image image, string path, int quality)
@@ -252,7 +341,39 @@ public sealed class ScreenshotModule : IGameModule
     private static extern bool GetClientRect(IntPtr hWnd, out NativeRect lpRect);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool ClientToScreen(IntPtr hWnd, ref NativePoint lpPoint);
+    private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, PrintWindowFlags nFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDc);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool BitBlt(
+        IntPtr hdc,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        IntPtr hdcSrc,
+        int x1,
+        int y1,
+        RasterOperation rop);
+
+    private readonly record struct CaptureRegion(IntPtr Hwnd, int Width, int Height);
+
+    [Flags]
+    private enum PrintWindowFlags : uint
+    {
+        ClientOnly = 0x00000001,
+        RenderFullContent = 0x00000002
+    }
+
+    private enum RasterOperation : uint
+    {
+        SourceCopy = 0x00CC0020
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRect
@@ -263,10 +384,4 @@ public sealed class ScreenshotModule : IGameModule
         public int Bottom;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
 }
