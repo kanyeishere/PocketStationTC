@@ -9,7 +9,7 @@ public static class CommandShortcutDefaults
     /// Increment every time new built-in shortcuts are added so that
     /// <see cref="EnsureDefaults"/> merges them into existing configs.
     /// </summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public static readonly IReadOnlyList<CommandShortcut> BuiltIn =
     [
@@ -21,6 +21,8 @@ public static class CommandShortcutDefaults
         new("ad-goto-fc", "前往部队房屋", "/ad goto fc"),
         new("ad-go-apartment", "前往公寓", "/ad go apartment"),
         new("ad-exitduty", "退出当前副本", "/ad exitduty"),
+        new("gbr-auto-on", "开启自动采集", "/gbr auto on"),
+        new("gbr-auto-off", "关闭自动采集", "/gbr auto off"),
     ];
 
     public static void EnsureDefaults(Configuration configuration)
