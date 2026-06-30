@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using QRCoder;
@@ -6,6 +7,8 @@ namespace PocketStation.Host;
 
 internal sealed class PocketStationConfigWindow
 {
+    private const string DiscordInviteUrl = "https://discord.gg/CQd4w7Bzv2";
+
     private readonly Configuration configuration;
     private readonly Action saveConfiguration;
     private readonly Action restartServer;
@@ -58,6 +61,7 @@ internal sealed class PocketStationConfigWindow
     private void DrawNetworkSettings()
     {
         ImGui.TextUnformatted("局域网移动控制台");
+        DrawCommunityLink();
         ImGui.Separator();
 
         var lanEnabled = configuration.LanEnabled;
@@ -93,6 +97,18 @@ internal sealed class PocketStationConfigWindow
             saveConfiguration();
             restartServer();
         }
+    }
+
+    private static void DrawCommunityLink()
+    {
+        ImGui.Spacing();
+        if (ImGui.Button("加入 Discord 社群", new Vector2(-1, 0)))
+            OpenDiscordInvite();
+
+        ImGui.TextDisabled(DiscordInviteUrl);
+        ImGui.SameLine();
+        if (ImGui.SmallButton("复制链接##discord"))
+            ImGui.SetClipboardText(DiscordInviteUrl);
     }
 
     private void DrawStreamSettings()
@@ -186,5 +202,21 @@ internal sealed class PocketStationConfigWindow
         }
 
         ImGui.Dummy(new Vector2(totalSize, totalSize));
+    }
+
+    private static void OpenDiscordInvite()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = DiscordInviteUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"Failed to open Discord invite: {ex}");
+        }
     }
 }

@@ -4,6 +4,9 @@
 
 <h1 align="center">Pocket Station</h1>
 <p align="center"><strong>把手机变成 FFXIV 的第二块屏幕 · Turn your phone into a second screen for FFXIV</strong></p>
+<p align="center">
+  <strong><a href="https://discord.gg/CQd4w7Bzv2">加入 Discord 社群 · Join our Discord community</a></strong>
+</p>
 
 ---
 
