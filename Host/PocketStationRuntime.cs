@@ -9,6 +9,7 @@ using PocketStation.Helpers;
 using PocketStation.Infrastructure.Game;
 using PocketStation.Infrastructure.Messaging;
 using PocketStation.Infrastructure.Network;
+using PocketStation.Infrastructure.Telemetry;
 using PocketStation.Services;
 
 namespace PocketStation.Host;
@@ -133,6 +134,12 @@ internal sealed class PocketStationRuntime : IDisposable
             lanEnabled = configuration.LanEnabled,
             urls = webServer.AccessUrls
         }));
+
+        PocketBackendClient.QueueHeartbeat(configuration, "startup", new
+        {
+            lanEnabled = configuration.LanEnabled,
+            port = configuration.Port,
+        });
     }
 
     public void Dispose()

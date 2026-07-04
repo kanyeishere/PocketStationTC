@@ -22,6 +22,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool RequireToken { get; set; } = true;
     public int Port { get; set; } = 8787;
     public string Token { get; set; } = AuthToken.Create();
+    public string InstallId { get; set; } = Guid.NewGuid().ToString("N");
+    public bool EnablePocketBackendTelemetry { get; set; } = true;
 
     public int MaxClients { get; set; } = 8;
     public int ChatHistoryLimit { get; set; } = 500;
@@ -44,6 +46,9 @@ public sealed class Configuration : IPluginConfiguration
 
         if (string.IsNullOrWhiteSpace(Token) || Token.Length < 16)
             Token = AuthToken.Create();
+
+        if (string.IsNullOrWhiteSpace(InstallId) || InstallId.Length < 8)
+            InstallId = Guid.NewGuid().ToString("N");
 
         if (MaxClients < 1)
             MaxClients = 1;
