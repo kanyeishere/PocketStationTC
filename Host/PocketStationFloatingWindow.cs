@@ -22,7 +22,7 @@ internal sealed class PocketStationFloatingWindow : IDisposable
     private readonly string _webView2DataFolder;
 
     private ISharedImmediateTexture? _floatingIconTexture;
-    private PhoneWebViewForm? _webForm;
+    private PhoneWebViewWindow? _webWindow;
 
     // Right-drag state (mirrors FloatingRecordWindow logic)
     private bool _wasDragging;
@@ -192,12 +192,16 @@ internal sealed class PocketStationFloatingWindow : IDisposable
 
     private void OpenWebView()
     {
-        if (_webForm != null && !_webForm.IsDisposed)
+        MouseCapture.ReleaseGameCapture();
+
+        if (_webWindow is { IsClosed: false } existingWindow)
         {
-            _webForm.BringToFront();
-            _webForm.Activate();
+            existingWindow.Activate();
             return;
         }
+
+        _webWindow?.Dispose();
+        _webWindow = null;
 
         var url = _getUrl();
         if (string.IsNullOrEmpty(url))
@@ -208,12 +212,14 @@ internal sealed class PocketStationFloatingWindow : IDisposable
 
         try
         {
-            _webForm = new PhoneWebViewForm(url, _webView2DataFolder);
-            _webForm.Show();
+            _webWindow = new PhoneWebViewWindow(url, _webView2DataFolder);
+            _webWindow.Activate();
         }
         catch (Exception ex)
         {
             Plugin.Log.Error(ex, "Failed to open WebView2 window");
+            _webWindow?.Dispose();
+            _webWindow = null;
         }
     }
 
@@ -283,7 +289,7 @@ internal sealed class PocketStationFloatingWindow : IDisposable
 
     public void Dispose()
     {
-        _webForm?.Dispose();
-        _webForm = null;
+        _webWindow?.Dispose();
+        _webWindow = null;
     }
 }
