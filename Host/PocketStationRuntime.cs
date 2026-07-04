@@ -119,7 +119,7 @@ internal sealed class PocketStationRuntime : IDisposable
             webView2DataFolder);
 
         if (configuration.LanEnabled)
-            webServer.Start();
+            StartServer();
 
         pluginInterface.UiBuilder.Draw += configWindow.Draw;
         pluginInterface.UiBuilder.Draw += floatingWindow.Draw;
@@ -226,7 +226,25 @@ internal sealed class PocketStationRuntime : IDisposable
     {
         webServer.StopAsync().GetAwaiter().GetResult();
         if (configuration.LanEnabled)
-            webServer.Start();
+            StartServer();
+    }
+
+    private void StartServer()
+    {
+        var result = webServer.Start();
+        if (!result.Started)
+        {
+            if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+                DService.Instance().Chat.PrintError($"[Pocket Station] 局域网服务器启动失败：{result.ErrorMessage}");
+            return;
+        }
+
+        if (!result.PortChanged)
+            return;
+
+        SaveConfiguration();
+        DService.Instance().Chat.Print(
+            $"[Pocket Station] 端口 {result.RequestedPort} 被占用，已自动切换到 {result.ActualPort}。");
     }
 
     private void SaveConfiguration()

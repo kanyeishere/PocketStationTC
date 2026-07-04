@@ -5,6 +5,15 @@ using PocketStation.Infrastructure.Messaging;
 
 namespace PocketStation.Infrastructure.Network;
 
+public readonly record struct LanWebServerStartResult(
+    bool Started,
+    int RequestedPort,
+    int ActualPort,
+    string? ErrorMessage)
+{
+    public bool PortChanged => Started && RequestedPort != ActualPort;
+}
+
 public sealed class LanWebServer : IDisposable
 {
     private const int MaxHeaderBytes = 64 * 1024;
@@ -41,20 +50,53 @@ public sealed class LanWebServer : IDisposable
     public int ClientCount => webSocketHub.Count;
 
     public IReadOnlyList<string> AccessUrls =>
-        HttpHelpers.GetAccessUrls(configuration.Port, configuration.Token);
+        listener == null
+            ? Array.Empty<string>()
+            : HttpHelpers.GetAccessUrls(configuration.Port, configuration.Token);
 
-    public void Start()
+    public LanWebServerStartResult Start()
     {
-        if (!configuration.LanEnabled || listener != null)
-            return;
+        var requestedPort = configuration.Port;
+
+        if (!configuration.LanEnabled)
+            return new LanWebServerStartResult(false, requestedPort, requestedPort, null);
+
+        if (listener != null)
+            return new LanWebServerStartResult(true, requestedPort, configuration.Port, null);
 
         cancellation = new CancellationTokenSource();
-        listener = new TcpListener(IPAddress.Any, configuration.Port);
-        listener.Start();
-        eventBus.Published += webSocketHub.BroadcastAsync;
-        acceptLoop = Task.Run(() => AcceptLoopAsync(cancellation.Token));
 
-        Plugin.Log.Info("Pocket Station LAN server started on port {Port}", configuration.Port);
+        if (!TryStartListener(requestedPort, out var startedListener, out var failure))
+        {
+            if (failure is SocketException socketException && IsAddressInUse(socketException))
+            {
+                Plugin.Log.Warning(socketException,
+                    "Pocket Station LAN port {Port} is already in use; selecting a free port.", requestedPort);
+
+                if (TryStartListener(0, out startedListener, out var fallbackFailure))
+                    return CompleteStart(startedListener!, requestedPort, cancellation.Token);
+
+                failure = fallbackFailure ?? failure;
+            }
+
+            CleanupStartAttempt();
+            Plugin.Log.Error(failure, "Pocket Station LAN server failed to start on port {Port}", requestedPort);
+            return new LanWebServerStartResult(false, requestedPort, requestedPort, failure?.Message);
+        }
+
+        return CompleteStart(startedListener!, requestedPort, cancellation.Token);
+    }
+
+    private LanWebServerStartResult CompleteStart(TcpListener startedListener, int requestedPort, CancellationToken token)
+    {
+        listener = startedListener;
+        var actualPort = GetPort(startedListener, requestedPort);
+        configuration.Port = actualPort;
+        eventBus.Published += webSocketHub.BroadcastAsync;
+        acceptLoop = Task.Run(() => AcceptLoopAsync(token));
+
+        Plugin.Log.Info("Pocket Station LAN server started on port {Port}", actualPort);
+        return new LanWebServerStartResult(true, requestedPort, actualPort, null);
     }
 
     public async Task StopAsync()
@@ -79,6 +121,13 @@ public sealed class LanWebServer : IDisposable
         cancellation = null;
     }
 
+    private void CleanupStartAttempt()
+    {
+        cancellation?.Dispose();
+        cancellation = null;
+        listener = null;
+    }
+
     public void Dispose()
     {
         if (disposed) return;
@@ -97,6 +146,34 @@ public sealed class LanWebServer : IDisposable
             _ = Task.Run(() => HandleClientAsync(client, ct), ct);
         }
     }
+
+    private static bool TryStartListener(int port, out TcpListener? startedListener, out Exception? failure)
+    {
+        TcpListener? candidate = null;
+        try
+        {
+            candidate = new TcpListener(IPAddress.Any, port);
+            candidate.Start();
+            startedListener = candidate;
+            failure = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            try { candidate?.Stop(); }
+            catch { }
+
+            startedListener = null;
+            failure = ex;
+            return false;
+        }
+    }
+
+    private static int GetPort(TcpListener startedListener, int fallbackPort) =>
+        startedListener.LocalEndpoint is IPEndPoint endpoint ? endpoint.Port : fallbackPort;
+
+    private static bool IsAddressInUse(SocketException exception) =>
+        exception.SocketErrorCode == SocketError.AddressAlreadyInUse;
 
     private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
     {
