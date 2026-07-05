@@ -5,8 +5,8 @@
     "Punchline": "把手机变成 FFXIV 自动化的控制终端。",
     "Description": "Pocket Station 是一个在 FFXIV 中运行的 Web 服务器，让你可以通过同一网络下的手机、平板或笔记本电脑连接。实时监控游戏聊天并支持自定义过滤器，实时串流游戏画面到移动设备，以及远程执行游戏指令。使用 Tailscale 或路由器端口转发，也可在外网安全访问。",
     "InternalName": "PocketStation",
-    "AssemblyVersion": "0.0.0.3",
-    "TestingAssemblyVersion": "0.0.0.3",
+    "AssemblyVersion": "1.0.3.7",
+    "TestingAssemblyVersion": "1.0.3.7",
     "ApplicableVersion": "any",
     "Tags": [
       "chat",
