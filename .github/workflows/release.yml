@@ -41,15 +41,17 @@ jobs:
 
       - name: Update version in JSON files
         run: |
-          # We are in detached HEAD (tag checkout), switch to the default branch
-          $branch = git symbolic-ref refs/remotes/origin/HEAD 2>$null
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          # We are in detached HEAD (tag checkout), switch to the repository default branch.
+          $branch = "${{ github.event.repository.default_branch }}"
           if (-not $branch) {
-            $branch = git branch -r | Where-Object {$_ -notmatch 'origin/HEAD|->'} | Select-Object -First 1
+            $branch = "master"
           }
-          $branch = ($branch -replace '^refs/remotes/origin/', '' -replace '^origin/', '').Trim()
           Write-Host "Switching to branch: $branch"
           git checkout $branch
-          git pull origin $branch
+          git pull --ff-only origin $branch
 
           $version = "${{ steps.version.outputs.version }}"
           Write-Host "Updating JSON files to version $version"
@@ -71,8 +73,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pluginmaster.json PocketStation.json
-          git commit -m "Bump version to $version [skip ci]"
-          git push origin $branch
+          if (git diff --cached --quiet) {
+            Write-Host "Version files already match $version; nothing to commit."
+          } else {
+            git commit -m "Bump version to $version [skip ci]"
+            git push origin "HEAD:$branch"
+          }
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -93,7 +99,27 @@ jobs:
           npm run build
 
       - name: Build Plugin
-        run: dotnet build PocketStation.csproj --configuration Release
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          dotnet build PocketStation.csproj --configuration Release `
+            /p:Version="$version" `
+            /p:AssemblyVersion="$version" `
+            /p:FileVersion="$version" `
+            /p:InformationalVersion="$version"
+
+      - name: Verify plugin assembly version
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $assemblyPath = "bin\Release\PocketStation.dll"
+          if (-not (Test-Path $assemblyPath)) {
+            throw "Plugin assembly not found: $assemblyPath"
+          }
+
+          $actualVersion = [System.Reflection.AssemblyName]::GetAssemblyName($assemblyPath).Version.ToString()
+          Write-Host "PocketStation.dll assembly version: $actualVersion"
+          if ($actualVersion -ne $version) {
+            throw "Plugin assembly version '$actualVersion' does not match release version '$version'."
+          }
 
       - name: Package Plugin
         run: |
