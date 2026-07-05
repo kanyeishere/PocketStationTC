@@ -19,11 +19,11 @@
       "second-screen",
       "web-console"
     ],
-    "DalamudApiLevel": 15,
-    "IconUrl": "https://raw.githubusercontent.com/kanyeishere/PocketStation/master/icon.png",
-    "RepoUrl": "https://github.com/kanyeishere/PocketStation",
-    "DownloadLinkInstall": "https://github.com/kanyeishere/PocketStation/releases/latest/download/latest.zip",
-    "DownloadLinkTesting": "https://github.com/kanyeishere/PocketStation/releases/latest/download/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/kanyeishere/PocketStation/releases/latest/download/latest.zip"
+    "DalamudApiLevel": 12,
+    "IconUrl": "https://raw.githubusercontent.com/kanyeishere/PocketStationTC/master/icon.png",
+    "RepoUrl": "https://github.com/kanyeishere/PocketStationTC",
+    "DownloadLinkInstall": "https://github.com/kanyeishere/PocketStationTC/releases/latest/download/latest.zip",
+    "DownloadLinkTesting": "https://github.com/kanyeishere/PocketStationTC/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/kanyeishere/PocketStationTC/releases/latest/download/latest.zip"
   }
 ]

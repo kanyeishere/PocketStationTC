@@ -15,14 +15,10 @@ jobs:
       run:
         shell: pwsh
 
-    env:
-      DALAMUD_HOME: ${{ github.workspace }}\lib
-
     steps:
-      - name: Checkout with submodules
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
           token: ${{ github.token }}
 
@@ -97,7 +93,7 @@ jobs:
           npm run build
 
       - name: Build Plugin
-        run: dotnet build --configuration Release /p:DalamudDevPath="${{ github.workspace }}\lib"
+        run: dotnet build PocketStation.csproj --configuration Release
 
       - name: Package Plugin
         run: |
@@ -121,8 +117,8 @@ jobs:
             TestingAssemblyVersion = $version
             ApplicableVersion      = "any"
             Tags                   = @("chat", "lan", "mobile", "monitor", "screenshot", "live-stream", "remote-control", "second-screen", "web-console")
-            DalamudApiLevel        = 15
-            IconUrl                = "https://raw.githubusercontent.com/kanyeishere/PocketStation/master/icon.png"
+            DalamudApiLevel        = 12
+            IconUrl                = "https://raw.githubusercontent.com/kanyeishere/PocketStationTC/master/icon.png"
             RepoUrl                = $repoUrl
             DownloadLinkInstall    = $downloadUrl
             DownloadLinkTesting    = $downloadUrl
@@ -166,7 +162,7 @@ jobs:
           Write-Host "=== Running manifest aggregation ==="
           & ".github/scripts/aggregate-manifest.ps1" `
             -PocketStationRepo "${{ github.repository }}" `
-            -PocketRecorderRepo "kanyeishere/PocketRecorder" `
+            -PocketRecorderRepo "kanyeishere/PocketRecorderTC" `
             -GithubToken "${{ github.token }}"
 
           Write-Host "Uploading aggregated pluginmaster.json..."

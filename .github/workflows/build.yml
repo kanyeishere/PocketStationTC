@@ -13,14 +13,9 @@ jobs:
       run:
         shell: pwsh
 
-    env:
-      DALAMUD_HOME: ${{ github.workspace }}\lib
-
     steps:
-      - name: Checkout with submodules
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -41,7 +36,7 @@ jobs:
           npm run build
 
       - name: Build Plugin
-        run: dotnet build --configuration Release /p:DalamudDevPath="${{ github.workspace }}\lib"
+        run: dotnet build PocketStation.csproj --configuration Release
 
       - name: Store Build Artifacts
         uses: actions/upload-artifact@v4

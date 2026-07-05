@@ -1,24 +1,27 @@
 using System.Collections;
 using System.Reflection;
 using Dalamud.Plugin;
-using OmenTools;
-using OmenTools.Dalamud.Helpers;
 
 namespace PocketStation.Helpers;
 
 /// <summary>
-///     扩展 <see cref="DalamudReflector" />，补充插件开关能力。
-///     OmenTools 是外部 submodule，不便直接修改，故在此包装。
+///     通过 Dalamud 内部 PluginManager 反射补充插件开关能力。
 /// </summary>
 public static class DalamudReflectorEx
 {
     private const BindingFlags AllFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+    private static IDalamudPluginInterface? pluginInterface;
 
     // 首次调用时反射解析，之后零开销
     private static MethodInfo? _cachedLoadAsync;
     private static MethodInfo? _cachedUnloadAsync;
     private static object? _cachedDisposalMode;
     private static bool _resolved;
+
+    public static void Initialize(IDalamudPluginInterface pluginInterface)
+    {
+        DalamudReflectorEx.pluginInterface = pluginInterface;
+    }
 
     /// <summary>
     ///     启用或禁用一个已安装的插件。
@@ -28,7 +31,7 @@ public static class DalamudReflectorEx
     {
         try
         {
-            var pm = DalamudReflector.GetPluginManager();
+            var pm = GetPluginManager();
             if (pm == null) return "PluginManager not available.";
 
             var installedPlugins = pm.GetType()
@@ -100,7 +103,7 @@ public static class DalamudReflectorEx
 
         try
         {
-            var disposalType = DService.Instance().PI.GetType().Assembly
+            var disposalType = GetDalamudAssembly()
                 .GetType("Dalamud.Plugin.Internal.Types.PluginLoaderDisposalMode");
             if (disposalType != null)
                 _cachedDisposalMode = Enum.ToObject(disposalType, 1); // WaitBeforeDispose
@@ -109,5 +112,24 @@ public static class DalamudReflectorEx
         {
             // ignored
         }
+    }
+
+    private static object? GetPluginManager()
+    {
+        var assembly = GetDalamudAssembly();
+        var serviceType = assembly.GetType("Dalamud.Service`1", true);
+        var pluginManagerType = assembly.GetType("Dalamud.Plugin.Internal.PluginManager", true);
+        return serviceType
+            ?.MakeGenericType(pluginManagerType!)
+            .GetMethod("Get")
+            ?.Invoke(null, BindingFlags.Default, null, [], null);
+    }
+
+    private static Assembly GetDalamudAssembly()
+    {
+        if (pluginInterface == null)
+            throw new InvalidOperationException("DalamudReflectorEx has not been initialized.");
+
+        return pluginInterface.GetType().Assembly;
     }
 }

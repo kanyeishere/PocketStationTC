@@ -1,4 +1,3 @@
-using OmenTools.OmenService;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using PocketStation.Domain;
 
@@ -22,7 +21,7 @@ public static class CurrencyHelper
 
         foreach (var (itemId, name, iconId, isWeeklyLimited) in KnownCurrencies)
         {
-            var count = LocalPlayerState.GetItemCount(itemId);
+            var count = GetItemCount(itemId);
             result.Add(new CurrencyInfo(
                 itemId,
                 name,
@@ -51,6 +50,29 @@ public static class CurrencyHelper
         {
             Plugin.Log.Debug(ex, "Failed to capture limited tomestone weekly progress");
             return (null, null);
+        }
+    }
+
+    private unsafe static uint GetItemCount(uint itemId)
+    {
+        try
+        {
+            var currencyManager = FFXIVClientStructs.FFXIV.Client.Game.CurrencyManager.Instance();
+            if (currencyManager != null && currencyManager->HasItem(itemId))
+                return currencyManager->GetItemCount(itemId);
+
+            var inventoryManager = InventoryManager.Instance();
+            if (inventoryManager == null)
+                return 0;
+
+            var normal = inventoryManager->GetInventoryItemCount(itemId);
+            var highQuality = inventoryManager->GetInventoryItemCount(itemId, true);
+            return (uint)Math.Max(0, normal + highQuality);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Debug(ex, "Failed to capture item count for {ItemId}", itemId);
+            return 0;
         }
     }
 }

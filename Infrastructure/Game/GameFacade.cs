@@ -1,8 +1,10 @@
-using Dalamud.Game.Chat;
+using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.ClientState.Statuses;
 using Dalamud.Plugin.Services;
-using OmenTools.Interop.Game.Lumina;
-using OmenTools.OmenService;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using Lumina.Excel.Sheets;
 using PocketStation.Domain;
 
 namespace PocketStation.Infrastructure.Game;
@@ -14,6 +16,7 @@ public sealed class GameFacade : IDisposable
     private readonly IChatGui chatGui;
     private readonly ICommandManager commandManager;
     private readonly IClientState clientState;
+    private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
     private readonly IFramework framework;
@@ -25,6 +28,7 @@ public sealed class GameFacade : IDisposable
         IChatGui chatGui,
         ICommandManager commandManager,
         IClientState clientState,
+        IDataManager dataManager,
         IObjectTable objectTable,
         IPartyList partyList,
         IFramework framework)
@@ -32,6 +36,7 @@ public sealed class GameFacade : IDisposable
         this.chatGui = chatGui;
         this.commandManager = commandManager;
         this.clientState = clientState;
+        this.dataManager = dataManager;
         this.objectTable = objectTable;
         this.partyList = partyList;
         this.framework = framework;
@@ -59,12 +64,12 @@ public sealed class GameFacade : IDisposable
         {
             try
             {
-                ChatManager.Instance().SendMessage(normalized);
+                ChatSender.Send(normalized);
                 return true;
             }
             catch (Exception ex)
             {
-                Plugin.Log.Error(ex, "OmenTools ChatManager send failed, falling back to ICommandManager");
+                Plugin.Log.Error(ex, "Direct chat send failed, falling back to ICommandManager");
                 return commandManager.ProcessCommand(normalized);
             }
         }).ConfigureAwait(false);
@@ -75,7 +80,7 @@ public sealed class GameFacade : IDisposable
         CharacterState? local = null;
         CharacterState? target = null;
 
-        var localPlayer = objectTable.LocalPlayer;
+        var localPlayer = clientState.LocalPlayer;
         if (localPlayer != null)
         {
             local = ToCharacterState(localPlayer);
@@ -93,10 +98,10 @@ public sealed class GameFacade : IDisposable
             else if (member != null)
                 party.Add(new CharacterState(
                     member.Name.TextValue,
-                    member.EntityId,
-                    member.EntityId,
+                    member.ObjectId,
+                    member.ObjectId,
                     member.ClassJob.RowId,
-                    LuminaWrapper.GetJobName(member.ClassJob.RowId),
+                    GetJobName(member.ClassJob.RowId),
                     member.Level,
                     member.CurrentHP,
                     member.MaxHP,
@@ -109,9 +114,10 @@ public sealed class GameFacade : IDisposable
 
         var currencies = CurrencyHelper.Capture();
 
-        var territoryName = LuminaWrapper.GetZonePlaceName(clientState.TerritoryType);
-        var worldName = LuminaWrapper.GetWorldName(GameState.CurrentWorld);
-        var dataCenterName = LuminaWrapper.GetWorldDCName(GameState.CurrentWorld);
+        var currentWorld = GetCurrentWorldId();
+        var territoryName = GetZonePlaceName(clientState.TerritoryType);
+        var worldName = GetWorldName(currentWorld);
+        var dataCenterName = GetWorldDataCenterName(currentWorld);
 
         return new PlayerSnapshot(
             clientState.IsLoggedIn,
@@ -136,26 +142,31 @@ public sealed class GameFacade : IDisposable
         chatGui.ChatMessage -= OnChatMessage;
     }
 
-    private void OnChatMessage(IHandleableChatMessage message)
+    private void OnChatMessage(
+        XivChatType type,
+        int timestamp,
+        ref SeString sender,
+        ref SeString message,
+        ref bool isHandled)
     {
         var evt = new ChatEvent(
             Interlocked.Increment(ref chatSequence),
-            message.LogKind.ToString(),
-            message.Sender.TextValue,
-            message.Message.TextValue,
+            type.ToString(),
+            sender.TextValue,
+            message.TextValue,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         ChatReceived?.Invoke(evt);
     }
 
-    private static CharacterState ToCharacterState(ICharacter character)
+    private CharacterState ToCharacterState(ICharacter character)
     {
         return new CharacterState(
             character.Name.TextValue,
             character.GameObjectId,
             character.EntityId,
             character.ClassJob.RowId,
-            LuminaWrapper.GetJobName(character.ClassJob.RowId),
+            GetJobName(character.ClassJob.RowId),
             character.Level,
             character.CurrentHp,
             character.MaxHp,
@@ -166,7 +177,7 @@ public sealed class GameFacade : IDisposable
             character is IBattleChara battleChara ? ToStatusEvents(battleChara.StatusList) : []);
     }
 
-    private static IReadOnlyList<StatusEvent> ToStatusEvents(IEnumerable<Dalamud.Game.ClientState.Statuses.IStatus> statuses)
+    private static IReadOnlyList<StatusEvent> ToStatusEvents(IEnumerable<Dalamud.Game.ClientState.Statuses.Status> statuses)
     {
         return statuses
             .Where(status => status.StatusId != 0)
@@ -176,5 +187,35 @@ public sealed class GameFacade : IDisposable
                 status.Param,
                 status.SourceId))
             .ToList();
+    }
+
+    private string GetJobName(uint rowId)
+    {
+        var row = dataManager.GetExcelSheet<ClassJob>().GetRowOrDefault(rowId);
+        return row?.Name.ToString() ?? string.Empty;
+    }
+
+    private string GetZonePlaceName(uint territoryType)
+    {
+        var row = dataManager.GetExcelSheet<TerritoryType>().GetRowOrDefault(territoryType);
+        return row?.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty;
+    }
+
+    private string GetWorldName(uint rowId)
+    {
+        var row = dataManager.GetExcelSheet<World>().GetRowOrDefault(rowId);
+        return row?.Name.ToString() ?? string.Empty;
+    }
+
+    private string GetWorldDataCenterName(uint rowId)
+    {
+        var row = dataManager.GetExcelSheet<World>().GetRowOrDefault(rowId);
+        return row?.DataCenter.ValueNullable?.Name.ToString() ?? string.Empty;
+    }
+
+    private static unsafe uint GetCurrentWorldId()
+    {
+        var agent = AgentLobby.Instance();
+        return agent != null ? (uint)agent->LobbyData.CurrentWorldId : 0;
     }
 }

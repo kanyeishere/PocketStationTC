@@ -28,7 +28,7 @@ jobs:
 
           & ".github/scripts/aggregate-manifest.ps1" `
             -PocketStationRepo "${{ github.repository }}" `
-            -PocketRecorderRepo "kanyeishere/PocketRecorder" `
+            -PocketRecorderRepo "kanyeishere/PocketRecorderTC" `
             -GithubToken "${{ github.token }}"
 
       - name: Find latest release tag

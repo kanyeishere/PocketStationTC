@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using QRCoder;
 
 namespace PocketStation.Host;

@@ -1,7 +1,7 @@
 using System.Numerics;
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Interface.Textures;
-using OmenTools;
+using Dalamud.Plugin.Services;
 
 namespace PocketStation.Host;
 
@@ -20,6 +20,7 @@ internal sealed class PocketStationFloatingWindow : IDisposable
     private readonly Action _openConfig;
     private readonly Func<string> _getUrl;
     private readonly string _webView2DataFolder;
+    private readonly ITextureProvider _textureProvider;
 
     private ISharedImmediateTexture? _floatingIconTexture;
     private PhoneWebViewForm? _webForm;
@@ -40,13 +41,15 @@ internal sealed class PocketStationFloatingWindow : IDisposable
         Action saveConfiguration,
         Action openConfig,
         Func<string> getUrl,
-        string webView2DataFolder)
+        string webView2DataFolder,
+        ITextureProvider textureProvider)
     {
         _configuration = configuration;
         _saveConfiguration = saveConfiguration;
         _openConfig = openConfig;
         _getUrl = getUrl;
         _webView2DataFolder = webView2DataFolder;
+        _textureProvider = textureProvider;
         IsOpen = configuration.ShowFloatingButton;
     }
 
@@ -132,7 +135,7 @@ internal sealed class PocketStationFloatingWindow : IDisposable
             var iconPath = Path.Combine(
                 Plugin.PluginInterface.AssemblyLocation.Directory?.FullName ?? AppContext.BaseDirectory,
                 "floating-icon.png");
-            _floatingIconTexture = DService.Instance().Texture.GetFromFile(iconPath);
+            _floatingIconTexture = _textureProvider.GetFromFile(iconPath);
         }
 
         var wrap = _floatingIconTexture.GetWrapOrEmpty();
@@ -171,10 +174,10 @@ internal sealed class PocketStationFloatingWindow : IDisposable
             draw.AddRectFilled(panelMin, panelMax, panel, 10f);
             DrawCornerTicks(draw, panelMin, panelMax, cyan, magenta);
 
-            if (wrap.Handle != nint.Zero)
+            if (wrap.ImGuiHandle != nint.Zero)
             {
                 var iconInset = hovered ? 0f : 0.5f;
-                draw.AddImage(wrap.Handle, panelMin + new Vector2(iconInset), panelMax - new Vector2(iconInset), Vector2.Zero, Vector2.One);
+                draw.AddImage(wrap.ImGuiHandle, panelMin + new Vector2(iconInset), panelMax - new Vector2(iconInset), Vector2.Zero, Vector2.One);
             }
             else
             {

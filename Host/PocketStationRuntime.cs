@@ -1,8 +1,7 @@
 using Dalamud.Game.Command;
+using Dalamud.Interface.Textures;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using OmenTools;
-using OmenTools.Dalamud.Helpers;
 using PocketStation.Api;
 using PocketStation.Api.Controllers;
 using PocketStation.Helpers;
@@ -20,6 +19,7 @@ internal sealed class PocketStationRuntime : IDisposable
     private const string ShortCommandName = "/ps";
 
     private readonly IDalamudPluginInterface pluginInterface;
+    private readonly IChatGui chatGui;
     private readonly ICommandManager commandManager;
     private readonly Configuration configuration;
     private readonly GameFacade game;
@@ -37,21 +37,21 @@ internal sealed class PocketStationRuntime : IDisposable
         ICommandManager commandManager,
         IClientState clientState,
         IDataManager dataManager,
+        ITextureProvider textureProvider,
         IObjectTable objectTable,
         IPartyList partyList,
         IFramework framework)
     {
         this.pluginInterface = pluginInterface;
+        this.chatGui = chatGui;
         this.commandManager = commandManager;
-
-        DService.Init(pluginInterface);
 
         configuration = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         configuration.Normalize();
         SaveConfiguration();
 
         var eventBus = new EventBus();
-        game = new GameFacade(chatGui, commandManager, clientState, objectTable, partyList, framework);
+        game = new GameFacade(chatGui, commandManager, clientState, dataManager, objectTable, partyList, framework);
         game.Initialize();
 
         var configDirectory = pluginInterface.GetPluginConfigDirectory();
@@ -65,6 +65,7 @@ internal sealed class PocketStationRuntime : IDisposable
         {
             OnTogglePlugin = DalamudReflectorEx.SetPluginStateAsync
         };
+        DalamudReflectorEx.Initialize(pluginInterface);
 
         moduleHost = new PocketModuleHost();
         moduleHost.Add(chatMonitor);
@@ -116,7 +117,8 @@ internal sealed class PocketStationRuntime : IDisposable
             SaveConfiguration,
             OpenConfigUi,
             () => $"http://127.0.0.1:{configuration.Port}/?token={Uri.EscapeDataString(configuration.Token)}",
-            webView2DataFolder);
+            webView2DataFolder,
+            textureProvider);
 
         if (configuration.LanEnabled)
             StartServer();
@@ -160,7 +162,6 @@ internal sealed class PocketStationRuntime : IDisposable
         webServer.Dispose();
         moduleHost.Dispose();
         game.Dispose();
-        DService.Uninit();
         SaveConfiguration();
     }
 
@@ -192,7 +193,7 @@ internal sealed class PocketStationRuntime : IDisposable
         {
             configuration.ShowFloatingButton = !configuration.ShowFloatingButton;
             SaveConfiguration();
-            DService.Instance().Chat.Print(
+            chatGui.Print(
                 $"[Pocket Station] 悬浮按钮已{(configuration.ShowFloatingButton ? "显示" : "隐藏")}。");
             return;
         }
@@ -213,12 +214,12 @@ internal sealed class PocketStationRuntime : IDisposable
         try
         {
             var result = await screenshotModule.CaptureAsync(CancellationToken.None).ConfigureAwait(false);
-            DService.Instance().Chat.Print($"[Pocket Station] 截图已推送：{result.Width}x{result.Height}");
+            chatGui.Print($"[Pocket Station] 截图已推送：{result.Width}x{result.Height}");
         }
         catch (Exception ex)
         {
             Plugin.Log.Error(ex, "Failed to capture screenshot from command");
-            DService.Instance().Chat.PrintError($"[Pocket Station] 截图失败：{ex.Message}");
+            chatGui.PrintError($"[Pocket Station] 截图失败：{ex.Message}");
         }
     }
 
@@ -235,7 +236,7 @@ internal sealed class PocketStationRuntime : IDisposable
         if (!result.Started)
         {
             if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
-                DService.Instance().Chat.PrintError($"[Pocket Station] 局域网服务器启动失败：{result.ErrorMessage}");
+                chatGui.PrintError($"[Pocket Station] 局域网服务器启动失败：{result.ErrorMessage}");
             return;
         }
 
@@ -243,7 +244,7 @@ internal sealed class PocketStationRuntime : IDisposable
             return;
 
         SaveConfiguration();
-        DService.Instance().Chat.Print(
+        chatGui.Print(
             $"[Pocket Station] 端口 {result.RequestedPort} 被占用，已自动切换到 {result.ActualPort}。");
     }
 
