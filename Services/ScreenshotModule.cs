@@ -14,6 +14,8 @@ public sealed class ScreenshotModule : IGameModule
     private readonly EventBus eventBus;
     private readonly string cacheDirectory;
     private readonly SemaphoreSlim captureLock = new(1, 1);
+    private readonly SemaphoreSlim streamStateLock = new(1, 1);
+    private static readonly TimeSpan StreamStopTimeout = TimeSpan.FromSeconds(3);
 
     private string? latestPath;
     private int latestWidth;
@@ -21,7 +23,6 @@ public sealed class ScreenshotModule : IGameModule
 
     private CancellationTokenSource? streamCts;
     private Task? streamTask;
-    private Func<byte[], Task>? frameCallback;
     private bool isStreaming;
 
     public string Name => "Screenshot";
@@ -70,85 +71,121 @@ public sealed class ScreenshotModule : IGameModule
         }
     }
 
-    public async Task StartStreamingAsync(int fps, Func<byte[], Task> onFrame)
+    public async Task StartStreamingAsync(int fps, Func<byte[], CancellationToken, Task> onFrame)
     {
-        await StopStreamingAsync().ConfigureAwait(false);
-
-        fps = Math.Clamp(fps, 1, 120);
-        frameCallback = onFrame;
-        streamCts = new CancellationTokenSource();
-        var token = streamCts.Token;
-        isStreaming = true;
-
-        var delayMs = 1000.0 / fps;
-        streamTask = Task.Run(async () =>
+        await streamStateLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            var sw = Stopwatch.StartNew();
-            while (!token.IsCancellationRequested)
+            await StopStreamingCoreAsync().ConfigureAwait(false);
+
+            fps = Math.Clamp(fps, 1, 120);
+            streamCts = new CancellationTokenSource();
+            var token = streamCts.Token;
+            isStreaming = true;
+
+            var delayMs = 1000.0 / fps;
+            streamTask = Task.Run(async () =>
             {
-                var frameStart = sw.Elapsed.TotalMilliseconds;
+                var sw = Stopwatch.StartNew();
+                while (!token.IsCancellationRequested)
+                {
+                    var frameStart = sw.Elapsed.TotalMilliseconds;
 
-                try
-                {
-                    var frame = await CaptureFrameToMemoryAsync(token).ConfigureAwait(false);
-                    if (frameCallback != null)
-                        await frameCallback(frame).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Plugin.Log.Error(ex, "Stream frame capture failed");
-                }
+                    try
+                    {
+                        var frame = await CaptureFrameToMemoryAsync(token).ConfigureAwait(false);
+                        await onFrame(frame, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Log.Error(ex, "Stream frame capture failed");
+                    }
 
-                var elapsed = sw.Elapsed.TotalMilliseconds - frameStart;
-                var delay = (int)Math.Max(1, delayMs - elapsed);
-                try
-                {
-                    await Task.Delay(delay, token).ConfigureAwait(false);
+                    var elapsed = sw.Elapsed.TotalMilliseconds - frameStart;
+                    var delay = (int)Math.Max(1, delayMs - elapsed);
+                    try
+                    {
+                        await Task.Delay(delay, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-            }
-        });
+            });
 
-        Plugin.Log.Info("Stream started at {Fps} FPS", fps);
+            Plugin.Log.Info("Stream started at {Fps} FPS", fps);
+        }
+        finally
+        {
+            streamStateLock.Release();
+        }
     }
 
     public async Task StopStreamingAsync()
     {
-        // Cancel first, then wait for the task to finish before disposing/nullifying.
-        if (streamCts != null)
+        await streamStateLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            await streamCts.CancelAsync().ConfigureAwait(false);
+            await StopStreamingCoreAsync().ConfigureAwait(false);
         }
-
-        if (streamTask != null)
+        finally
         {
-            try { await streamTask.ConfigureAwait(false); }
+            streamStateLock.Release();
+        }
+    }
+
+    private async Task StopStreamingCoreAsync()
+    {
+        var cts = streamCts;
+        var task = streamTask;
+
+        if (cts != null)
+            await cts.CancelAsync().ConfigureAwait(false);
+
+        if (task != null)
+        {
+            try { await task.WaitAsync(StreamStopTimeout).ConfigureAwait(false); }
             catch (OperationCanceledException) { }
+            catch (TimeoutException ex)
+            {
+                Plugin.Log.Warning(ex, "Stream task did not stop within {TimeoutMs}ms; detaching it.",
+                    (int)StreamStopTimeout.TotalMilliseconds);
+            }
             catch (Exception ex) { Plugin.Log.Error(ex, "Stream task finalization failed"); }
-            streamTask = null;
         }
 
-        if (streamCts != null)
-        {
-            streamCts.Dispose();
-            streamCts = null;
-        }
-
-        frameCallback = null;
+        streamTask = null;
+        streamCts = null;
         isStreaming = false;
+
+        if (cts == null)
+            return;
+
+        if (task == null || task.IsCompleted)
+        {
+            cts.Dispose();
+            return;
+        }
+
+        _ = task.ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+                _ = t.Exception;
+
+            cts.Dispose();
+        }, TaskScheduler.Default);
     }
 
     public void Dispose()
     {
         StopStreamingAsync().GetAwaiter().GetResult();
         captureLock.Dispose();
+        streamStateLock.Dispose();
     }
 
     private async Task<byte[]> CaptureFrameToMemoryAsync(CancellationToken ct)

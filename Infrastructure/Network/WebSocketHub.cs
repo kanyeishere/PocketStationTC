@@ -6,6 +6,9 @@ namespace PocketStation.Infrastructure.Network;
 
 public sealed class WebSocketHub
 {
+    private static readonly TimeSpan TextSendTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan BinarySendTimeout = TimeSpan.FromSeconds(2);
+
     private readonly ConcurrentDictionary<Guid, WebSocketConnection> connections = [];
     private readonly EventBus eventBus;
 
@@ -35,35 +38,85 @@ public sealed class WebSocketHub
         return BroadcastRawAsync(eventBus.Serialize(envelope), CancellationToken.None);
     }
 
-    public async Task BroadcastRawAsync(string text, CancellationToken cancellationToken)
+    public Task BroadcastRawAsync(string text, CancellationToken cancellationToken)
     {
-        foreach (var connection in connections.Values)
+        var snapshot = connections.Values.ToArray();
+        return Task.WhenAll(snapshot.Select(connection =>
+            SendWithTimeoutAsync(
+                connection,
+                token => connection.SendTextAsync(text, token),
+                TextSendTimeout,
+                "text",
+                cancellationToken)));
+    }
+
+    public Task BroadcastBinaryAsync(byte[] data, CancellationToken cancellationToken)
+    {
+        var snapshot = connections.Values.ToArray();
+        return Task.WhenAll(snapshot.Select(connection =>
+            SendWithTimeoutAsync(
+                connection,
+                token => connection.SendBinaryAsync(data, token),
+                BinarySendTimeout,
+                "binary",
+                cancellationToken)));
+    }
+
+    private async Task SendWithTimeoutAsync(
+        WebSocketConnection connection,
+        Func<CancellationToken, Task> send,
+        TimeSpan timeout,
+        string kind,
+        CancellationToken cancellationToken)
+    {
+        var sendCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var sendTask = send(sendCts.Token);
+        var timeoutTask = Task.Delay(timeout, cancellationToken);
+
+        try
         {
-            try
+            var completed = await Task.WhenAny(sendTask, timeoutTask).ConfigureAwait(false);
+            if (completed != sendTask)
             {
-                await connection.SendTextAsync(text, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.Debug(ex, "Dropping failed WebSocket connection {Id}", connection.Id);
+                await sendCts.CancelAsync().ConfigureAwait(false);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    ObserveDetachedSend(sendTask, sendCts);
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                Plugin.Log.Debug("Dropping slow WebSocket connection {Id} after {Kind} send timeout of {TimeoutMs}ms",
+                    connection.Id, kind, (int)timeout.TotalMilliseconds);
                 Remove(connection);
+                ObserveDetachedSend(sendTask, sendCts);
+                return;
             }
+
+            await sendTask.ConfigureAwait(false);
+            sendCts.Dispose();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            sendCts.Dispose();
+            throw;
+        }
+        catch (Exception ex)
+        {
+            sendCts.Dispose();
+            Plugin.Log.Debug(ex, "Dropping failed WebSocket connection {Id} during {Kind} send", connection.Id, kind);
+            Remove(connection);
         }
     }
 
-    public async Task BroadcastBinaryAsync(byte[] data, CancellationToken cancellationToken)
+    private static void ObserveDetachedSend(Task sendTask, CancellationTokenSource sendCts)
     {
-        foreach (var connection in connections.Values)
+        _ = sendTask.ContinueWith(t =>
         {
-            try
-            {
-                await connection.SendBinaryAsync(data, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.Debug(ex, "Dropping failed WebSocket connection {Id}", connection.Id);
-                Remove(connection);
-            }
-        }
+            if (t.IsFaulted)
+                _ = t.Exception;
+
+            sendCts.Dispose();
+        }, TaskScheduler.Default);
     }
 }

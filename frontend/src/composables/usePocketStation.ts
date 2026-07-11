@@ -17,7 +17,8 @@ import type {
   Envelope,
   HealthInfo,
   PlayerSnapshot,
-  ScreenshotReadyEvent
+  ScreenshotReadyEvent,
+  StreamConfig
 } from "@/types";
 
 export function usePocketStation() {
@@ -57,7 +58,8 @@ export function usePocketStation() {
 
   connection = usePocketConnection(connectionStatus.setConnection, {
     onBinaryFrame: liveStream.handleBinaryFrame,
-    onEnvelope: handleEnvelope
+    onEnvelope: handleEnvelope,
+    onOpen: () => liveStream.recoverStreamIfStale()
   });
 
   function handleCommandResult(result: CommandResult | null | undefined) {
@@ -83,17 +85,19 @@ export function usePocketStation() {
 
   async function loadInitial() {
     try {
-      const [health, modes, history, state] = await Promise.all([
+      const [health, modes, history, state, streamConfig] = await Promise.all([
         getJson<HealthInfo>("/api/health"),
         getJson<ChatFilterSettings>("/api/chat/modes"),
         getJson<ChatEvent[]>("/api/chat/history"),
-        getJson<PlayerSnapshot>("/api/state")
+        getJson<PlayerSnapshot>("/api/state"),
+        getJson<StreamConfig>("/api/stream/config")
       ]);
 
       serverInfo.value = health;
       chat.setFilterSettings(modes);
       chat.setHistory(history);
       playerState.setSnapshot(state);
+      liveStream.applyStreamConfig(streamConfig);
     } catch (error) {
       connectionStatus.setConnection(String(error), "offline");
     }
@@ -142,12 +146,15 @@ export function usePocketStation() {
     liveFrame: liveStream.liveFrame,
     liveFrameSize: liveStream.liveFrameSize,
     liveRunning: liveStream.liveRunning,
+    liveWaiting: liveStream.liveWaiting,
     loadDailyRoutines: dailyRoutines.loadDailyRoutines,
     loadInitial,
     loadPlugins: plugins.loadPlugins,
     loadShortcuts: shortcuts.loadShortcuts,
     plugins: plugins.plugins,
     pluginsLoaded: plugins.pluginsLoaded,
+    reconnectWs: connection.reconnectWs,
+    recoverLiveStream: liveStream.recoverStreamIfStale,
     requestScreenshot: screen.requestScreenshot,
     saveMode: chat.saveMode,
     saveShortcuts: shortcuts.saveShortcuts,
@@ -164,6 +171,7 @@ export function usePocketStation() {
     snapshot: playerState.snapshot,
     startStream: liveStream.startStream,
     stopStream: liveStream.stopStream,
+    syncStreamConfig: liveStream.syncStreamConfig,
     toggleDailyRoutine: dailyRoutines.toggleDailyRoutine,
     togglePlugin: plugins.togglePlugin
   };

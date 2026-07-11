@@ -97,7 +97,7 @@ internal sealed class PocketStationRuntime : IDisposable
             configuration.StreamFps = fps;
             SaveConfiguration();
             return screenshotModule.StartStreamingAsync(fps,
-                frame => webSocketHub.BroadcastBinaryAsync(frame, CancellationToken.None));
+                (frame, token) => webSocketHub.BroadcastBinaryAsync(frame, token));
         };
         commandDispatcher.OnStopStream = () => screenshotModule.StopStreamingAsync();
 

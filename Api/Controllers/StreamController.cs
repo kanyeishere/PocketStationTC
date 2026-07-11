@@ -49,7 +49,7 @@ public sealed class StreamController : IHttpController
 
                 var fps = Math.Clamp(command?.Fps ?? configuration.StreamFps, 1, 120);
                 await screenshotModule.StartStreamingAsync(fps,
-                    frame => webSocketHub.BroadcastBinaryAsync(frame, CancellationToken.None)).ConfigureAwait(false);
+                    (frame, token) => webSocketHub.BroadcastBinaryAsync(frame, token)).ConfigureAwait(false);
                 configuration.StreamFps = fps;
                 saveConfiguration();
 

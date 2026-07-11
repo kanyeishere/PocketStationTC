@@ -14,6 +14,10 @@ namespace PocketStation.Api;
 
 public sealed class WebSocketHandler
 {
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan StaleConnectionTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan PingSendTimeout = TimeSpan.FromSeconds(5);
+
     private readonly Configuration configuration;
     private readonly EventBus eventBus;
     private readonly WebSocketHub webSocketHub;
@@ -84,6 +88,9 @@ public sealed class WebSocketHandler
             return;
         }
 
+        using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var heartbeatTask = RunHeartbeatAsync(connection, heartbeatCts.Token);
+
         try
         {
             await connection.SendTextAsync(
@@ -106,8 +113,78 @@ public sealed class WebSocketHandler
         }
         finally
         {
+            await heartbeatCts.CancelAsync().ConfigureAwait(false);
+            try { await heartbeatTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Plugin.Log.Debug(ex, "WebSocket heartbeat finalization failed"); }
+
             webSocketHub.Remove(connection);
         }
+    }
+
+    private async Task RunHeartbeatAsync(WebSocketConnection connection, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(HeartbeatInterval, ct).ConfigureAwait(false);
+
+            if (DateTime.UtcNow - connection.LastSeenUtc > StaleConnectionTimeout)
+            {
+                Plugin.Log.Debug("Dropping stale WebSocket connection {Id}", connection.Id);
+                webSocketHub.Remove(connection);
+                return;
+            }
+
+            if (!await TrySendPingAsync(connection, ct).ConfigureAwait(false))
+            {
+                Plugin.Log.Debug("Dropping WebSocket connection {Id} after heartbeat ping failure", connection.Id);
+                webSocketHub.Remove(connection);
+                return;
+            }
+        }
+    }
+
+    private static async Task<bool> TrySendPingAsync(WebSocketConnection connection, CancellationToken ct)
+    {
+        var pingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var pingTask = connection.SendPingAsync([], pingCts.Token);
+        var timeoutTask = Task.Delay(PingSendTimeout, ct);
+
+        try
+        {
+            var completed = await Task.WhenAny(pingTask, timeoutTask).ConfigureAwait(false);
+            if (completed != pingTask)
+            {
+                await pingCts.CancelAsync().ConfigureAwait(false);
+                ObserveDetachedPing(pingTask, pingCts);
+                return false;
+            }
+
+            await pingTask.ConfigureAwait(false);
+            pingCts.Dispose();
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            pingCts.Dispose();
+            throw;
+        }
+        catch
+        {
+            pingCts.Dispose();
+            return false;
+        }
+    }
+
+    private static void ObserveDetachedPing(Task pingTask, CancellationTokenSource pingCts)
+    {
+        _ = pingTask.ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+                _ = t.Exception;
+
+            pingCts.Dispose();
+        }, TaskScheduler.Default);
     }
 
     private async Task HandleMessageAsync(

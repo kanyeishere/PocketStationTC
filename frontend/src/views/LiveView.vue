@@ -7,6 +7,7 @@ const props = defineProps<{
   running: boolean;
   frame: ImageBitmap | null;
   frameSize: string;
+  waiting: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -21,6 +22,7 @@ const isFullscreen = ref(false);
 const isFallbackFullscreen = ref(false);
 const fallbackViewportStyle = ref<Record<string, string>>({});
 let animating = false;
+let pendingBitmap: ImageBitmap | null = null;
 
 type WebKitFullscreenDocument = Document & {
   webkitFullscreenElement?: Element | null;
@@ -193,25 +195,47 @@ function onFpsKeydown(e: KeyboardEvent) {
   }
 }
 
-watch(() => props.frame, (bitmap) => {
-  if (!bitmap || !canvas.value) return;
+function drawPendingFrame() {
+  if (animating) return;
+
+  animating = true;
+  requestAnimationFrame(() => {
+    const bitmap = pendingBitmap;
+    pendingBitmap = null;
+    animating = false;
+
+    if (!bitmap || !canvas.value) {
+      return;
+    }
+
+    drawFrame(bitmap);
+
+    if (pendingBitmap) {
+      drawPendingFrame();
+    }
+  });
+}
+
+function drawFrame(bitmap: ImageBitmap) {
   const c = canvas.value;
+  if (!c) return;
+
   const ctx = c.getContext("2d");
   if (!ctx) return;
 
-  // Resize canvas to match frame on first frame or dimension change
   if (c.width !== bitmap.width || c.height !== bitmap.height) {
     c.width = bitmap.width;
     c.height = bitmap.height;
   }
 
-  if (!animating) {
-    animating = true;
-    requestAnimationFrame(() => {
-      ctx.drawImage(bitmap, 0, 0);
-      animating = false;
-    });
-  }
+  ctx.drawImage(bitmap, 0, 0);
+}
+
+watch(() => props.frame, (bitmap) => {
+  if (!bitmap) return;
+
+  pendingBitmap = bitmap;
+  drawPendingFrame();
 });
 
 watch(() => props.fps, (v) => {
@@ -270,7 +294,7 @@ watch(() => props.running, (running) => {
           @keydown="onFpsKeydown"
         >
       </label>
-      <span>{{ running ? `● ${frameSize}` : "○ 未推流" }}</span>
+      <span>{{ running ? (waiting ? "● 等待画面" : `● ${frameSize}`) : "○ 未推流" }}</span>
     </div>
     <div
       ref="screenFrame"
@@ -284,12 +308,12 @@ watch(() => props.running, (running) => {
       @click="toggleFullscreen"
     >
       <canvas
-        v-show="running"
+        v-show="running && frame"
         ref="canvas"
         class="live-canvas"
       />
-      <div v-if="!running" class="live-placeholder">
-        点击「开始直播」启动实时视频流
+      <div v-if="!running || waiting" class="live-placeholder">
+        {{ running ? "等待直播画面..." : "点击「开始直播」启动实时视频流" }}
       </div>
       <div v-if="running && !isFullscreen" class="fullscreen-hint">
         ⛶ 点击画面全屏

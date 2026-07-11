@@ -12,6 +12,7 @@ public sealed class WebSocketConnection : IDisposable
     private bool disposed;
 
     public Guid Id { get; } = Guid.NewGuid();
+    public DateTime LastSeenUtc { get; private set; } = DateTime.UtcNow;
 
     public WebSocketConnection(TcpClient client)
     {
@@ -27,6 +28,8 @@ public sealed class WebSocketConnection : IDisposable
             if (frame == null)
                 break;
 
+            LastSeenUtc = DateTime.UtcNow;
+
             switch (frame.Opcode)
             {
                 case 0x1:
@@ -37,6 +40,8 @@ public sealed class WebSocketConnection : IDisposable
                     return;
                 case 0x9:
                     await SendFrameAsync(0xA, frame.Payload, cancellationToken).ConfigureAwait(false);
+                    break;
+                case 0xA:
                     break;
             }
         }
@@ -52,13 +57,17 @@ public sealed class WebSocketConnection : IDisposable
         return SendFrameAsync(0x2, data, cancellationToken);
     }
 
+    public Task SendPingAsync(byte[] payload, CancellationToken cancellationToken)
+    {
+        return SendFrameAsync(0x9, payload, cancellationToken);
+    }
+
     public void Dispose()
     {
         if (disposed)
             return;
 
         disposed = true;
-        sendLock.Dispose();
         stream.Dispose();
         client.Dispose();
     }

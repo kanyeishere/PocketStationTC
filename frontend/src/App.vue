@@ -61,6 +61,7 @@ const {
   liveFrame,
   liveFrameSize,
   liveRunning,
+  liveWaiting,
   loadInitial,
   loadPlugins,
   loadShortcuts,
@@ -70,6 +71,8 @@ const {
   sendChat,
   sendShortcut,
   shortcuts,
+  reconnectWs,
+  recoverLiveStream,
   togglePlugin,
   plugins,
   pluginsLoaded,
@@ -78,12 +81,19 @@ const {
   loadDailyRoutines,
   toggleDailyRoutine,
   startStream,
-  stopStream
+  stopStream,
+  syncStreamConfig
 } = usePocketStation();
+
+let wasHidden = document.visibilityState === "hidden";
 
 onMounted(() => {
   replaceRoute(activeTab.value);
   window.addEventListener("popstate", syncTabFromRoute);
+  window.addEventListener("pageshow", onPageShow);
+  window.addEventListener("online", onOnline);
+  window.addEventListener("focus", onFocus);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   loadInitial();
   loadShortcuts();
   loadDailyRoutines();
@@ -95,6 +105,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("popstate", syncTabFromRoute);
+  window.removeEventListener("pageshow", onPageShow);
+  window.removeEventListener("online", onOnline);
+  window.removeEventListener("focus", onFocus);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 });
 
 watch(activeTab, (tab) => {
@@ -126,6 +140,47 @@ function syncTabFromRoute() {
 function doSendShortcut(command: string) {
   sendShortcut(command);
   activeTab.value = "chat";
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === "hidden") {
+    wasHidden = true;
+    return;
+  }
+
+  if (!wasHidden) {
+    return;
+  }
+
+  wasHidden = false;
+  recoverAfterResume(true);
+}
+
+function onPageShow(event: PageTransitionEvent) {
+  recoverAfterResume(event.persisted);
+}
+
+function onOnline() {
+  recoverAfterResume(true);
+}
+
+function onFocus() {
+  recoverAfterResume(false);
+}
+
+function recoverAfterResume(forceReconnect: boolean) {
+  if (forceReconnect) {
+    reconnectWs();
+  } else {
+    connectWs();
+  }
+
+  if (activeTab.value === "live") {
+    void recoverLiveStream(forceReconnect);
+    return;
+  }
+
+  void syncStreamConfig().catch(() => {});
 }
 </script>
 
@@ -182,6 +237,7 @@ function doSendShortcut(command: string) {
       :running="liveRunning"
       :frame="liveFrame"
       :frame-size="liveFrameSize"
+      :waiting="liveWaiting"
       @start="startStream"
       @stop="stopStream"
     />
