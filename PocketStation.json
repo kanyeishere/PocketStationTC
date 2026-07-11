@@ -6,7 +6,7 @@
   "InternalName": "PocketStation",
   "IconUrl": "https://raw.githubusercontent.com/kanyeishere/PocketStationTC/master/icon.png",
   "RepoUrl": "https://github.com/kanyeishere/PocketStationTC",
-  "AssemblyVersion": "1.0.4.5",
+  "AssemblyVersion": "1.0.4.6",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 12,
   "Tags": [
